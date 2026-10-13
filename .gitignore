@@ -38,3 +38,6 @@ caption_verification/
 apps/web/node_modules/
 apps/web/.next/
 apps/web/out/
+
+# Agent internal
+.omp/
