@@ -485,7 +485,7 @@ def test_api_create_job_with_config(client):
     res = client.post(
         "/api/v4/jobs",
         json={
-            "vod_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "vod_url": "https://www.youtube.com/watch?v=dQw4w9WgXcA",
             "framing_mode": "auto_follow_speaker",
             "caption_preset": "creator_bold",
             "caption_language": "id",
@@ -515,7 +515,7 @@ def test_api_moment_detection_validation(client):
     r2 = client.post(
         "/api/v4/jobs",
         json={
-            "vod_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "vod_url": "https://www.youtube.com/watch?v=dQw4w9WgXcB",
             "moment_detection_mode": "ai",
             "max_clips": 4,
             "min_clip_duration": 10.0,

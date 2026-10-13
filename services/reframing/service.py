@@ -123,6 +123,7 @@ class Reframer:
                 break
 
             if frame_idx % sample_interval == 0:
+                t_sec = round(frame_idx / video_fps, 3)
                 # Scene-aware tracking reset: do not carry tracking across scene transitions
                 scene_cuts = [s["start"] for s in (scenes or []) if s.get("start", 0) > 0.3]
                 if any(abs(t_sec - cut_t) < 0.35 for cut_t in scene_cuts):
