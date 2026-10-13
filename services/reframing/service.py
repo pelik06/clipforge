@@ -78,6 +78,7 @@ class Reframer:
         sample_fps: float = 4.0,
         out_width: int = 1080,
         out_height: int = 1920,
+        scenes: Optional[List[Dict[str, float]]] = None,
     ) -> ReframingAnalysis:
         """Sample video frames, detect faces, track primary subject, and compute smoothed crop trajectory."""
         cap = cv2.VideoCapture(video_path)
@@ -122,7 +123,10 @@ class Reframer:
                 break
 
             if frame_idx % sample_interval == 0:
-                t_sec = round(frame_idx / video_fps, 3)
+                # Scene-aware tracking reset: do not carry tracking across scene transitions
+                scene_cuts = [s["start"] for s in (scenes or []) if s.get("start", 0) > 0.3]
+                if any(abs(t_sec - cut_t) < 0.35 for cut_t in scene_cuts):
+                    tracks.clear()
                 try:
                     _, faces = detector.detect(frame)
                 except Exception:
@@ -231,14 +235,31 @@ class Reframer:
 
             raw_points.append((ts, last_known_cx, last_known_cy, clamped_crop_x, crop_y))
 
-        # Temporal Smoothing: Exponential Moving Average (EMA) and velocity clamping
+        # Temporal Smoothing with Safe Deadband & Jump Confirmation
         smoothed_trajectory: List[TrajectoryPoint] = []
-        alpha = 0.25  # Smoothing factor
+        alpha = 0.25
         smoothed_x = default_center_x if not raw_points else raw_points[0][3]
+        jump_confirm_count = 0
 
         for i, (ts, tcx, tcy, cx, cy) in enumerate(raw_points):
-            smoothed_x = alpha * cx + (1.0 - alpha) * smoothed_x
-            # Clamp bounds
+            scene_cuts = [s["start"] for s in (scenes or []) if s.get("start", 0) > 0.3]
+            if any(abs(ts - cut_t) < 0.4 for cut_t in scene_cuts):
+                smoothed_x = cx
+                jump_confirm_count = 0
+            else:
+                # Safe Zone Deadband: ignore minor jitter < 25 pixels
+                target_shift = smoothed_x if abs(cx - smoothed_x) < 25.0 else cx
+
+                # Jump Confirmation (JUMP_CONFIRM_FRAMES = 3)
+                if abs(target_shift - smoothed_x) > 180.0:
+                    jump_confirm_count += 1
+                    if jump_confirm_count < 3:
+                        target_shift = smoothed_x
+                else:
+                    jump_confirm_count = 0
+
+                smoothed_x = alpha * target_shift + (1.0 - alpha) * smoothed_x
+
             final_crop_x = max(0.0, min(max_crop_x, smoothed_x))
             smoothed_trajectory.append(
                 TrajectoryPoint(
@@ -308,6 +329,7 @@ class Reframer:
         width: int = 1080,
         height: int = 1920,
         framing_mode: str = "center_crop",
+        scenes: Optional[List[Dict[str, float]]] = None,
     ) -> Dict[str, Any]:
         """Render source footage into vertical 9:16 short format applying requested framing mode."""
         source = Path(source_path)
@@ -346,8 +368,8 @@ class Reframer:
         )
 
         if framing_mode == FramingMode.AUTO_FOLLOW_SPEAKER.value:
-            # Perform face/person detection & tracking analysis
-            analysis = self.analyze_footage(str(source), out_width=width, out_height=height)
+            # Perform face/person detection & tracking analysis with scene-aware resets
+            analysis = self.analyze_footage(str(source), out_width=width, out_height=height, scenes=scenes)
             filter_str = self.build_crop_filter(analysis, src_w, src_h, width, height)
         else:
             # Center crop default

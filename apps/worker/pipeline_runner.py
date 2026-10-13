@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from core.config.settings import Settings
 from core.models.configuration import JobConfig
 from core.models.transcript import TranscriptSegment, Word
+from core.models.candidate import CandidateMoment
 from core.storage import get_job, save_clip, save_job
 from services.captions.service import CaptionRenderer
 from services.transcription.service import Transcriber, is_whisper_available
@@ -239,14 +240,14 @@ def execute_job_pipeline_sync(
     try:
         if kind == "youtube":
             meta = extract_youtube_metadata(vod_url)
-            job["metadata"] = meta
+            job["metadata"].update(meta)
             title = meta.get("title", "YouTube Video")
             uploader = meta.get("uploader", "Creator")
             dur = meta.get("duration") or 0
             update_stage(1, "completed", detail=f"Extracted: '{title}' by {uploader} ({dur}s)", elapsed=round(time.time() - t1, 2))
         else:
             meta = {"title": Path(vod_url).name, "uploader": "Local Operator", "duration": 15.0}
-            job["metadata"] = meta
+            job["metadata"].update(meta)
             update_stage(1, "skipped", detail="Local file: external metadata lookup skipped.", elapsed=round(time.time() - t1, 2))
     except Exception as exc:
         update_stage(1, "failed", error=str(exc))
@@ -341,23 +342,57 @@ def execute_job_pipeline_sync(
     t5 = time.time()
     update_stage(5, "running", detail="Selecting viral moments via transcript and scene analysis...")
     try:
-        vid_duration = SignalDetector().get_media_duration(str(source_file))
-        words_json = serialize_words_for_llm(transcript_segments) if transcript_segments else []
-        selector = MomentSelector(mode=job_cfg.moment_detection_mode, provider=job_cfg.moment_detection_provider)
-        selection_res = selector.select_moments(
-            video_duration=vid_duration,
-            transcript_segments=transcript_segments,
-            words_json=words_json,
-            scenes=scenes,
-            min_duration=job_cfg.min_clip_duration,
-            max_duration=job_cfg.max_clip_duration,
-            max_clips=job_cfg.max_clips,
-        )
-        scored_candidates = selection_res.candidates
+        meta_candidates = job.get("metadata", {}).get("candidates")
+        if meta_candidates is not None:
+            scored_candidates = [
+                CandidateMoment(
+                    start=float(c["start"]),
+                    end=float(c["end"]),
+                    score=float(c.get("score", 85.0)),
+                    reasons=c.get("reasons", ["Highlight candidate"]),
+                )
+                for c in meta_candidates
+            ]
+            selection_res_mode = "configured"
+            selection_res_provider = "metadata"
+            selection_res_notice = ""
+        else:
+            vid_duration = SignalDetector().get_media_duration(str(source_file))
+            words_json = serialize_words_for_llm(transcript_segments) if transcript_segments else []
+            selector = MomentSelector(mode=job_cfg.moment_detection_mode, provider=job_cfg.moment_detection_provider)
+            selection_res = selector.select_moments(
+                video_duration=vid_duration,
+                transcript_segments=transcript_segments,
+                words_json=words_json,
+                scenes=scenes,
+                min_duration=job_cfg.min_clip_duration,
+                max_duration=job_cfg.max_clip_duration,
+                max_clips=job_cfg.max_clips,
+                media_path=str(source_file),
+            )
+            scored_candidates = selection_res.candidates
+            selection_res_mode = selection_res.mode
+            selection_res_provider = selection_res.provider
+            selection_res_notice = selection_res.notice or ""
+        if not scored_candidates:
+            update_stage(
+                5,
+                "completed",
+                detail="Candidate detection: 0 moments met quality threshold (NO_VALID_MOMENTS).",
+                elapsed=round(time.time() - t5, 2),
+            )
+            for s_idx in range(5, 13):
+                update_stage(s_idx, "skipped", detail="Skipped: NO_VALID_MOMENTS met the quality threshold.")
+            job["status"] = "completed"
+            job["progress"] = 100
+            job["stage"] = "NO_VALID_MOMENTS — no highlights passed quality threshold"
+            save_job(job)
+            return job
+
         update_stage(
             5,
             "completed",
-            detail=f"Candidate detection: {len(scored_candidates)} moments selected ({selection_res.mode}, {selection_res.provider}). {selection_res.notice or ''}",
+            detail=f"Candidate detection: {len(scored_candidates)} moments selected ({selection_res_mode}, {selection_res_provider}). {selection_res_notice}",
             elapsed=round(time.time() - t5, 2),
         )
     except Exception as exc:

@@ -1,7 +1,7 @@
 import json
 import os
 import re
-import urllib.request
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -85,7 +85,24 @@ class MomentSelector:
         min_duration: float,
         max_duration: float,
         max_clips: int,
+        media_path: Optional[str] = None,
     ) -> List[CandidateMoment]:
+        """Multi-signal heuristic selection integrating audio energy, motion, face, and speech."""
+        if media_path and Path(media_path).exists():
+            try:
+                from services.detection.moment_pipeline import NonLLMMomentDetector
+                detector = NonLLMMomentDetector()
+                moments = detector.detect_moments(
+                    media_path=media_path,
+                    transcript_segments=transcript_segments,
+                    min_clip_duration=min_duration,
+                    max_clip_duration=max_duration,
+                    max_clips=max_clips,
+                )
+                if moments:
+                    return moments
+            except Exception:
+                pass
         """Acoustic + sentence boundary heuristic fallback when LLM is unavailable."""
         candidates: List[CandidateMoment] = []
 
@@ -165,6 +182,7 @@ class MomentSelector:
         min_duration: float = 12.0,
         max_duration: float = 55.0,
         max_clips: int = 5,
+        media_path: Optional[str] = None,
     ) -> MomentSelectionResult:
         """Select top 3-15 viral moments, prioritizing AI semantic analysis with heuristic fallback."""
         ai_raw_json = None
@@ -248,6 +266,7 @@ Rules:
                 min_duration=min_duration,
                 max_duration=max_duration,
                 max_clips=max_clips,
+                media_path=media_path,
             )
             active_mode = "heuristic_fallback"
             notice = "AI semantic provider unavailable or unconfigured. Using acoustic + sentence boundary heuristic fallback."
