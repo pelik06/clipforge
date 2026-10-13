@@ -1,31 +1,31 @@
 # ClipForge
 
-Streamer-first short-form clipping automation.
+Streamer-first short-form clipping automation system with smart reframing, word-level captions, and human approval gates.
 
-> **Important:** ClipForge is its own implementation. OpenShorts is treated as a reference for architecture/ideas, not as a runtime dependency.
+> **Architecture Note:** ClipForge studies proven open-source implementations (such as **OpenShorts** and **ai-clips-maker**) for algorithms and patterns (MediaPipe/YOLO tracking, Whisper alignment, ASS karaoke captions), while maintaining its own modular service implementation and independent runtime.
 
-## Current target
-
-Build the smallest useful loop:
+## Target Architecture
 
 ```text
-Streamer VOD
+Streamer VOD / YouTube URL / GDrive
    ↓
-Ingest
+Ingest & Validation
    ↓
-Transcription
+Transcription (faster-whisper / whisperX word-level)
    ↓
-Signal Detection
+Signal & Scene Detection (PySceneDetect + Audio energy)
    ↓
-Candidate Windows
+Candidate Windows & LLM Virality Scoring
    ↓
-Interestingness Scoring
+Smart 9:16 Reframing (TRACK / SPLIT / GENERAL + EMA Tripod)
    ↓
-Clip Rendering
+Dynamic Captions (Programmatic .ass karaoke style)
    ↓
-QC
+FFmpeg Rendering & QC
    ↓
-Output + Manifest
+Human Approval Gate (Telegram / Discord)
+   ↓
+Publishing / Campaign Adapters (Direct social or Clippo.id bounty flow)
 ```
 
 ## Repository layout

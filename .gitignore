@@ -27,3 +27,14 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Database & verification media
+data/*.db
+data/*.db-*
+caption_verification/
+*.egg-info/
+
+# Frontend
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/

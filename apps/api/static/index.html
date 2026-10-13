@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipForge Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans">
+    <div class="max-w-4xl mx-auto px-6 py-12">
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">ClipForge Dashboard</h1>
+            <p class="text-slate-400 mt-2">Streamer-first short-form clipping, review, and Clippo.id integration.</p>
+        </header>
+
+        <main class="space-y-8">
+            <!-- Submit VOD / Clippo.id task -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <h2 class="text-xl font-semibold mb-4 text-indigo-300">Submit VOD or Clippo.id Task</h2>
+                <form id="clipForm" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-1">Video URL / Local Path / Clippo.id Job</label>
+                        <input type="text" id="vodUrl" required placeholder="https://youtube.com/watch?v=... or C:/Videos/vod.mp4" 
+                            class="w-full bg-slate-950 border border-slate-700 rounded-lg px-4 py-3 text-slate-100 focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 font-medium py-3 rounded-lg transition shadow-lg shadow-indigo-600/20">
+                        Generate & Process Clips
+                    </button>
+                </form>
+            </div>
+
+            <!-- Generated Clips Review Section -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+                <h2 class="text-xl font-semibold mb-4 text-cyan-300">Generated Clips & Review Queue</h2>
+                <div id="clipsList" class="space-y-4">
+                    <p class="text-slate-500 italic">No clips generated yet. Submit a VOD above to begin.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.getElementById('clipForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = document.getElementById('vodUrl').value;
+            const listDiv = document.getElementById('clipsList');
+            listDiv.innerHTML = `<p class="text-indigo-400 animate-pulse">Processing clipping pipeline for ${url}...</p>`;
+            
+            setTimeout(() => {
+                listDiv.innerHTML = `
+                    <div class="bg-slate-950 border border-slate-800 rounded-lg p-4 flex items-center justify-between">
+                        <div>
+                            <span class="text-xs bg-indigo-950 text-indigo-300 px-2 py-1 rounded font-mono">READY</span>
+                            <h3 class="font-semibold text-slate-200 mt-1">Sample Viral Highlight #1</h3>
+                            <p class="text-xs text-slate-400">Duration: 15.0s | Source: ${url}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="alert('Clip Approved & Published!')" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-xs font-medium">Approve</button>
+                            <button onclick="alert('Clip Rejected!')" class="bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded text-xs font-medium">Reject</button>
+                        </div>
+                    </div>
+                `;
+            }, 1500);
+        });
+    </script>
+</body>
+</html>

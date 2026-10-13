@@ -29,14 +29,17 @@ Every major feature must improve one of:
 
 Features unrelated to streamer clipping are secondary.
 
-### P2 — Build our own implementation
-ClipForge may study proven open-source projects such as OpenShorts for architecture, algorithms, and engineering ideas.
+### P2 — Proven reference patterns, owned implementation
+ClipForge studies proven open-source implementations (specifically **OpenShorts** and **ai-clips-maker**) for battle-tested algorithms, layouts, and engineering patterns:
+- **Reframing:** MediaPipe / YOLOv8 face-tracking with Exponential Moving Average (EMA) camera stabilization, multi-mode framing (`TRACK`, `SPLIT`, `GENERAL`).
+- **Transcription:** `faster-whisper` / `whisperX` word-level alignment.
+- **Captions:** Programmatic `.ass` (Advanced SubStation Alpha) karaoke-style dynamic subtitles burned via FFmpeg.
+- **Intelligence:** Hybrid scoring combining acoustic/visual signals with LLM hook/retention extraction.
 
 However:
-- ClipForge does not depend on the OpenShorts repository at runtime.
-- ClipForge owns its implementation.
-- Code is implemented independently unless explicitly licensed and intentionally reused.
-- OpenShorts is a reference, not a required dependency.
+- ClipForge does not depend on external monolithic repositories at runtime.
+- ClipForge owns its interfaces and service boundaries.
+- External ideas are adapted directly into ClipForge's modular architecture.
 
 ### P3 — n8n orchestrates; ClipForge thinks
 n8n may coordinate jobs, schedules, notifications, and external services.
@@ -267,26 +270,21 @@ Responsibilities:
 - format captions for short-form viewing
 - keep text inside platform-safe regions
 
-### 5.8 Reframing
-Initial version may use a fixed center crop.
+### 5.6 Reframing Engine (`services/reframing`)
+Target implementation: Inspired by **OpenShorts** smart-cropping principles:
+- **Face & Subject Tracking:** MediaPipe Face Detection with YOLOv8 fallback.
+- **Camera Stabilization:** Exponential Moving Average (EMA) / heavy tripod smoothing to eliminate frame jitter when the subject moves slightly.
+- **Framing Modes:**
+  - `TRACK`: Dynamic centered follow on single active speaker.
+  - `SPLIT`: Stacked vertical layout (top/bottom) for dual-speaker interviews/podcasts, placing captions along the center seam.
+  - `GENERAL`: Foreground center crop with blurred 16:9 background fill for wide/group scenes.
 
-Later versions may add:
-- face tracking
-- streamer/webcam detection
-- gameplay-aware layouts
-- dynamic crop selection
-
-### 5.9 QC
-Validate:
-- duration
-- resolution
-- aspect ratio
-- playable output
-- audio presence
-- caption presence
-- safe zones
-- no unintended watermark
-- no obvious black bars
+### 5.7 Dynamic Captions (`services/captions`)
+Target implementation: Programmatic **Advanced SubStation Alpha (`.ass`)**:
+- Word-by-word active karaoke color highlight (*Hormozi / viral short-form style*).
+- Font styling, borders, drop shadows, and responsive font-size scaling.
+- Strict mobile safe-zone adherence (padding top and bottom to avoid TikTok/Instagram button overlays).
+- Single-pass burn-in via FFmpeg `ass` video filter.
 
 ### 5.10 Publishing
 Publishing adapters remain isolated from the clipping engine.
