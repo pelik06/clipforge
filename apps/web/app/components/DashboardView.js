@@ -13,21 +13,35 @@ import {
   Sliders,
   Eye,
   Video,
-  CheckCheck
+  CheckCheck,
+  Cpu,
+  History,
+  RotateCcw,
+  Ban,
+  Trash2,
+  Download,
+  Layers
 } from 'lucide-react';
 import { useState } from 'react';
-import ClipModal from './ClipModal';
 
 export default function DashboardView({
   jobs = [],
   clips = [],
   fixtures = [],
+  renderJobs = [],
+  exportsList = [],
   systemDeps,
+  selectedJobId,
+  setSelectedJobId,
   setActiveView,
   onClipDecision,
-  actionLoading
+  actionLoading,
+  setEditingClip,
+  handleCancelRender,
+  handleRetryRender,
+  handleBatchRender,
+  handleDeleteExport
 }) {
-  const [modalClip, setModalClip] = useState(null);
   const [recentFilter, setRecentFilter] = useState('all'); // 'all', 'pending', 'approved'
   const [batchLoading, setBatchLoading] = useState(false);
 
@@ -85,7 +99,7 @@ export default function DashboardView({
             onClick={() => setActiveView('clips')}
             className="px-3 py-1.5 rounded-md bg-[#14161c] hover:bg-[#1a1d24] text-slate-300 text-xs font-medium border border-[#222631] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2563eb]"
           >
-            Review All Queue ({waitingApprovalClips.length})
+            Review Queue ({waitingApprovalClips.length})
           </button>
 
           <button
@@ -124,11 +138,13 @@ export default function DashboardView({
         </div>
 
         <div className="p-3.5 rounded-lg bg-[#14161c] border border-[#222631]">
-          <div className="text-[11px] text-slate-400 font-medium">Active Pipelines</div>
+          <div className="text-[11px] text-slate-400 font-medium">Render Queue & Exports</div>
           <div className="text-2xl font-semibold text-blue-400 mt-1 tabular-nums">
-            {activeJobs.length}
+            {renderJobs.length} / {exportsList.length}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">{jobs.length} jobs total</div>
+          <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
+            {renderJobs.length} active jobs • {exportsList.length} artifacts
+          </div>
         </div>
       </div>
 
@@ -214,18 +230,17 @@ export default function DashboardView({
                   key={clip.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setModalClip(clip)}
+                  onClick={() => setEditingClip(clip)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setModalClip(clip);
+                      setEditingClip(clip);
                     }
                   }}
                   className="p-3.5 hover:bg-[#181b22] cursor-pointer transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 group focus-visible:outline-none focus-visible:bg-[#181b22] focus-visible:ring-1 focus-visible:ring-[#2563eb]"
                 >
                   {/* Left: Thumbnail & Meta */}
                   <div className="flex items-start gap-3.5 min-w-0">
-                    {/* 9:16 Miniature */}
                     <div className="w-11 h-16 rounded bg-black border border-[#2b3140] shrink-0 overflow-hidden relative flex items-center justify-center">
                       {clip.media_url ? (
                         <video
@@ -238,7 +253,6 @@ export default function DashboardView({
                       )}
                     </div>
 
-                    {/* Titles & Timecode */}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-medium text-white truncate max-w-[360px] group-hover:text-blue-300 transition-colors">
@@ -247,6 +261,11 @@ export default function DashboardView({
                         <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#1c202a] text-slate-300 font-mono tabular-nums border border-[#2b3140]">
                           Score: {clip.score || '90/100'}
                         </span>
+                        {clip.is_recommended && (
+                          <span className="text-[9px] px-1 rounded bg-amber-950/60 text-amber-300 font-mono border border-amber-800/40">
+                            ★ RECOMMENDED
+                          </span>
+                        )}
                         {clip.is_fixture && (
                           <span className="text-[9px] px-1 rounded bg-[#2b3140]/60 text-slate-400 font-mono">
                             DEMO
@@ -281,14 +300,13 @@ export default function DashboardView({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setModalClip(clip);
+                        setEditingClip(clip);
                       }}
                       className="px-2.5 py-1 rounded text-xs text-slate-300 hover:text-white bg-[#1a1d24] hover:bg-[#222631] border border-[#2b3140] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2563eb]"
                     >
-                      Details & Editor
+                      Studio Editor
                     </button>
 
-                    {/* Decision buttons */}
                     {isWaiting ? (
                       <div className="flex items-center gap-1.5">
                         <button
@@ -335,46 +353,244 @@ export default function DashboardView({
         )}
       </div>
 
-      {/* Engine Dependencies Bar */}
-      <div className="rounded-lg bg-[#14161c] border border-[#222631] p-3.5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span className="text-xs font-semibold text-white uppercase tracking-wider">
-              Engine Dependencies
-            </span>
-          </div>
-          <div className="flex items-center gap-3 flex-wrap text-xs">
-            {systemDeps ? (
-              Object.entries(systemDeps).map(([tool, ready]) => (
-                <div key={tool} className="flex items-center gap-1.5 font-mono text-[11px]">
-                  <span className="text-slate-400">{tool}:</span>
-                  <span className={ready ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
-                    {ready ? 'OK' : 'MISSING'}
-                  </span>
-                </div>
-              ))
+      {/* P4 FEATURE FROM MASTER: Render Queue & Export Jobs */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-7 space-y-4">
+          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-blue-400" aria-hidden="true" />
+                <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
+                  Render Queue & Export Jobs
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                {handleBatchRender && (
+                  <button
+                    onClick={handleBatchRender}
+                    className="px-2.5 py-1 rounded bg-[#222631] hover:bg-[#2b3140] text-slate-300 text-xs font-medium transition-colors"
+                  >
+                    Batch Render Top 3
+                  </button>
+                )}
+                <span className="text-[11px] text-slate-400 font-mono tabular-nums">
+                  {renderJobs.length} Jobs
+                </span>
+              </div>
+            </div>
+
+            {renderJobs.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs">
+                No active render jobs in queue. Select a preset and queue clips from the review queue.
+              </div>
             ) : (
-              <span className="text-slate-500 text-xs">Checking dependencies…</span>
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                {renderJobs.map((rjob) => {
+                  const isQueued = rjob.status === 'queued';
+                  const isRendering = rjob.status === 'rendering';
+                  const isCompleted = rjob.status === 'completed';
+                  const isFailed = rjob.status === 'failed';
+
+                  return (
+                    <div
+                      key={rjob.id}
+                      className="p-3 rounded-md bg-[#0c0d11] border border-[#1d212b] text-xs flex flex-col gap-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-slate-300 font-semibold">{rjob.id}</span>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-[#1a1e2a] text-blue-300 font-mono uppercase">
+                            {rjob.preset || 'tiktok'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] font-semibold uppercase ${
+                              isCompleted
+                                ? 'text-emerald-400'
+                                : isFailed
+                                ? 'text-rose-400'
+                                : 'text-blue-400'
+                            }`}
+                          >
+                            {rjob.status}
+                          </span>
+                          {isRendering && handleCancelRender && (
+                            <button
+                              onClick={() => handleCancelRender(rjob.id)}
+                              className="p-1 text-slate-400 hover:text-rose-400"
+                              title="Cancel render"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {isFailed && handleRetryRender && (
+                            <button
+                              onClick={() => handleRetryRender(rjob.id)}
+                              className="p-1 text-slate-400 hover:text-blue-400"
+                              title="Retry render"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="w-full bg-[#14161c] h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${
+                            isCompleted ? 'bg-emerald-500' : isFailed ? 'bg-rose-500' : 'bg-blue-500'
+                          }`}
+                          style={{ width: `${Math.max(5, rjob.progress || 0)}%` }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono">
+                        <span>{rjob.stage || 'Processing'}</span>
+                        <span className="tabular-nums">{rjob.progress || 0}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Job History & Persistence */}
+          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-slate-400" aria-hidden="true" />
+                <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
+                  Job History & Persistence
+                </h2>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums">{jobs.length} jobs</span>
+            </div>
+
+            {jobs.length === 0 ? (
+              <div className="py-6 text-center text-slate-500 text-xs">No jobs recorded.</div>
+            ) : (
+              <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+                {jobs.map((j) => (
+                  <button
+                    key={j.id}
+                    onClick={() => setSelectedJobId && setSelectedJobId(j.id)}
+                    className={`w-full text-left p-2.5 rounded border text-xs transition-colors flex items-center justify-between ${
+                      j.id === selectedJobId
+                        ? 'bg-[#1c202a] border-blue-500/50 text-white'
+                        : 'bg-[#0c0d11] border-[#1d212b] text-slate-300 hover:border-[#2b3140]'
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate max-w-[280px]">{j.vod_url || j.id}</div>
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5">{j.stage || 'Completed'}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] font-semibold uppercase text-slate-400">{j.status}</span>
+                      <div className="text-[10px] text-slate-500 font-mono tabular-nums">{j.progress || 0}%</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
-      </div>
 
-      {/* Modal Inspector */}
-      {modalClip && (
-        <ClipModal
-          clip={modalClip}
-          onClose={() => setModalClip(null)}
-          onClipDecision={(id, dec) => {
-            onClipDecision(id, dec);
-            setModalClip((prev) =>
-              prev && prev.id === id ? { ...prev, status: dec === 'approve' ? 'APPROVED' : 'REJECTED' } : prev
-            );
-          }}
-          actionLoading={actionLoading}
-        />
-      )}
+        {/* Right Column: P4/P5 Export Library & Engine Diagnostics */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Film className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
+                  Export Library
+                </h2>
+              </div>
+              <span className="text-[11px] text-slate-400 font-mono tabular-nums">
+                {exportsList.length} Artifacts
+              </span>
+            </div>
+
+            {exportsList.length === 0 ? (
+              <div className="py-8 text-center text-slate-500 text-xs">
+                No rendered artifacts yet. Completed renders will appear here ready to publish.
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                {exportsList.map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="p-2.5 rounded bg-[#0c0d11] border border-[#1d212b] text-xs flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-semibold text-white truncate max-w-[180px]">
+                        {exp.title || exp.id}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono tabular-nums mt-0.5">
+                        {exp.preset} • {exp.resolution || '1080x1920'} • {exp.size_mb || '14'}MB
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {exp.url && (
+                        <a
+                          href={exp.url}
+                          download
+                          className="p-1 rounded bg-[#1c202a] text-emerald-400 hover:text-white"
+                          title="Download MP4"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      {handleDeleteExport && (
+                        <button
+                          onClick={() => handleDeleteExport(exp.id)}
+                          className="p-1 text-slate-500 hover:text-rose-400"
+                          title="Delete export"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Engine Dependencies Bar */}
+          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-3.5">
+            <div className="flex items-center gap-2 mb-2.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span className="text-xs font-semibold text-white uppercase tracking-wider">
+                Engine Dependencies
+              </span>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              {systemDeps ? (
+                Object.entries(systemDeps).map(([tool, ready]) => (
+                  <div
+                    key={tool}
+                    className="flex items-center justify-between p-2 rounded bg-[#0c0d11] border border-[#1d212b]"
+                  >
+                    <span className="text-slate-300 font-mono text-[11px]">{tool}</span>
+                    <span
+                      className={`text-[10px] font-mono font-semibold ${
+                        ready ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      {ready ? 'OK' : 'MISSING'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <span className="text-slate-500 text-xs">Checking dependencies…</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

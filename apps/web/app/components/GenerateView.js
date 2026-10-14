@@ -9,7 +9,11 @@ import {
   XCircle,
   Eye,
   Zap,
-  ArrowRight
+  ArrowRight,
+  Sliders,
+  Layers,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export default function GenerateView({
@@ -19,13 +23,50 @@ export default function GenerateView({
   handleUrlChange,
   handleVodSubmit,
   submitting,
+  clippoId,
+  setClippoId,
+  handleClippoSync,
+  clippoSubmitting,
+  framingMode,
+  setFramingMode,
   captionPreset,
   setCaptionPreset,
+  captionLanguage,
+  setCaptionLanguage,
+  captionSize,
+  setCaptionSize,
+  captionPosition,
+  setCaptionPosition,
+  captionTextColor,
+  setCaptionTextColor,
+  captionHighlightColor,
+  setCaptionHighlightColor,
+  captionWordHighlight,
+  setCaptionWordHighlight,
+  showAdvancedCaptions,
+  setShowAdvancedCaptions,
+  momentDetectionMode,
+  setMomentDetectionMode,
+  momentDetectionProvider,
+  setMomentDetectionProvider,
+  maxClips,
+  setMaxClips,
+  minClipDuration,
+  setMinClipDuration,
+  maxClipDuration,
+  setMaxClipDuration,
+  targetDurationPreset,
+  setTargetDurationPreset,
+  enableSceneDetection,
+  setEnableSceneDetection,
   selectedJobData,
   jobs = [],
   selectedJobId,
   setActiveView
 }) {
+  const [showClippo, setShowClippo] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const activeJob =
     selectedJobData ||
     jobs.find((j) => j.id === selectedJobId && (j.status === 'processing' || j.status === 'created'));
@@ -62,49 +103,99 @@ export default function GenerateView({
     }
   ];
 
+  const handleDurationPresetSelect = (preset) => {
+    if (setTargetDurationPreset) setTargetDurationPreset(preset);
+    if (preset === 'fast') {
+      if (setMinClipDuration) setMinClipDuration(15);
+      if (setMaxClipDuration) setMaxClipDuration(45);
+    } else if (preset === 'medium') {
+      if (setMinClipDuration) setMinClipDuration(45);
+      if (setMaxClipDuration) setMaxClipDuration(90);
+    } else if (preset === 'extended') {
+      if (setMinClipDuration) setMinClipDuration(90);
+      if (setMaxClipDuration) setMaxClipDuration(180);
+    }
+  };
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="border-b border-[#222631] pb-4">
-        <h1 className="text-xl font-semibold tracking-tight text-white">Generate Clips</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-white">Generate Clips Studio</h1>
         <p className="text-xs text-slate-400 mt-0.5">
-          Paste video link, pilih gaya caption, dan generate klip vertikal 9:16 otomatis.
+          Paste video link, tentukan durasi target dan caption, atau sinkronkan tugas dari Clippo.id.
         </p>
       </div>
 
       {/* Main Studio Card */}
       <div className="rounded-lg bg-[#14161c] border border-[#222631] p-5 sm:p-6 space-y-6">
         <form onSubmit={handleVodSubmit} className="space-y-6">
-          {/* Field 1: Video Link */}
+          {/* Section 1: Video Link & Clippo Toggle */}
           <div>
-            <label htmlFor="vod_url" className="text-xs font-semibold text-white uppercase tracking-wider block mb-2">
-              Link Video
-            </label>
-            <div className="relative">
-              <input
-                id="vod_url"
-                name="vod_url"
-                type="text"
-                autoComplete="off"
-                spellCheck={false}
-                value={vodUrl}
-                onChange={handleUrlChange}
-                placeholder="https://www.youtube.com/watch?v=… atau path file /video.mp4"
-                className={`w-full px-3.5 py-2.5 rounded-md bg-[#0c0d11] border text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#2563eb] transition-colors ${
-                  inputError ? 'border-rose-800' : 'border-[#222631]'
-                }`}
-              />
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="vod_url" className="text-xs font-semibold text-white uppercase tracking-wider block">
+                Link Video (Source Media)
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowClippo(!showClippo)}
+                className="text-[11px] text-[#3b82f6] hover:underline font-mono"
+              >
+                {showClippo ? 'Sembunyikan Clippo.id' : 'Gunakan Clippo.id Task'}
+              </button>
             </div>
+
+            <input
+              id="vod_url"
+              name="vod_url"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={vodUrl}
+              onChange={handleUrlChange}
+              placeholder="https://www.youtube.com/watch?v=… atau path file /video.mp4"
+              className={`w-full px-3.5 py-2.5 rounded-md bg-[#0c0d11] border text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#2563eb] transition-colors ${
+                inputError ? 'border-rose-800' : 'border-[#222631]'
+              }`}
+            />
             {inputError && <p className="text-[11px] text-rose-400 mt-1">{inputError}</p>}
             <p className="text-[11px] text-slate-500 mt-1 font-mono">
-              Mendukung link YouTube, YouTube Shorts, atau file lokal (.mp4, .mkv, .mov)
+              YouTube, Shorts, atau local file (.mp4, .mkv, .mov)
             </p>
           </div>
 
-          {/* Field 2: Pilihan Caption */}
+          {/* Section 2: Target Duration Presets (from master) */}
+          <div className="pt-2 border-t border-[#222631]">
+            <label className="text-xs font-semibold text-white uppercase tracking-wider block mb-2">
+              Target Clip Duration
+            </label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                { id: 'fast', label: 'Fast (15–45s)', desc: 'TikTok / Shorts quick hooks' },
+                { id: 'medium', label: 'Medium (45–90s)', desc: 'Balanced thought & payoff (Default)' },
+                { id: 'extended', label: 'Extended (90–180s)', desc: 'Deep story & podcast context' }
+              ].map((dp) => (
+                <button
+                  key={dp.id}
+                  type="button"
+                  onClick={() => handleDurationPresetSelect(dp.id)}
+                  className={`p-2.5 rounded border text-left transition-colors ${
+                    targetDurationPreset === dp.id
+                      ? 'bg-[#1c2233] border-[#3b82f6] text-white'
+                      : 'bg-[#0c0d11] border-[#1d212b] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="text-xs font-semibold">{dp.label}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{dp.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Section 3: Caption Presets */}
           <div className="pt-2 border-t border-[#222631]">
             <label className="text-xs font-semibold text-white uppercase tracking-wider block mb-2.5">
-              Pilihan Caption
+              Pilihan Caption & Subtitle
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -115,7 +206,7 @@ export default function GenerateView({
                     key={preset.id}
                     type="button"
                     onClick={() => setCaptionPreset(preset.id)}
-                    className={`p-3.5 rounded-md border text-left transition-colors flex flex-col justify-between gap-3 ${
+                    className={`p-3 rounded-md border text-left transition-colors flex flex-col justify-between gap-3 ${
                       isSelected
                         ? 'bg-[#1c2233] border-[#3b82f6] text-white shadow-sm'
                         : 'bg-[#0c0d11] border-[#1d212b] text-slate-300 hover:border-[#2b3140]'
@@ -124,14 +215,11 @@ export default function GenerateView({
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-semibold">{preset.label}</span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-blue-400" />
-                        )}
+                        {isSelected && <span className="w-2 h-2 rounded-full bg-blue-400" />}
                       </div>
                       <p className="text-[11px] text-slate-400">{preset.desc}</p>
                     </div>
 
-                    {/* Miniature caption style preview */}
                     <div className="w-full h-8 rounded bg-[#14161c] border border-[#222631] flex items-center justify-center text-center px-2 select-none">
                       <span className={`text-[10px] tracking-tight ${preset.previewClass}`}>
                         {preset.highlightWord ? (
@@ -150,10 +238,101 @@ export default function GenerateView({
             </div>
           </div>
 
+          {/* Section 4: Advanced Parameters (Framing, Detection, Style) */}
+          <div className="pt-2 border-t border-[#222631]">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-400" />
+              <span>Pengaturan Lanjutan (Framing 9:16, Bahasa, Detection Engine)</span>
+              {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-3 p-4 rounded-md bg-[#0c0d11] border border-[#1d212b] space-y-4 text-xs">
+                {/* Framing Mode */}
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">
+                    Framing Mode (9:16 Strategy)
+                  </label>
+                  <select
+                    value={framingMode}
+                    onChange={(e) => setFramingMode(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded bg-[#14161c] border border-[#222631] text-xs text-white"
+                  >
+                    <option value="auto_follow_speaker">Auto Follow Speaker (Face Tracking YuNet)</option>
+                    <option value="center_crop">Center Crop (Fixed Safe Zone)</option>
+                    <option value="split_screen">Split Screen (Podcast / Dual Speaker)</option>
+                    <option value="speaker_track">Speaker Track Only</option>
+                  </select>
+                </div>
+
+                {/* Language & Word Highlight */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Bahasa Transkripsi</label>
+                    <select
+                      value={captionLanguage}
+                      onChange={(e) => setCaptionLanguage(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded bg-[#14161c] border border-[#222631] text-xs text-white"
+                    >
+                      <option value="auto">Auto-Detect</option>
+                      <option value="en">English</option>
+                      <option value="id">Indonesian (Bahasa)</option>
+                      <option value="es">Spanish</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Word Highlight</label>
+                    <button
+                      type="button"
+                      onClick={() => setCaptionWordHighlight(!captionWordHighlight)}
+                      className={`w-full px-2.5 py-1.5 rounded border text-xs font-medium transition-colors ${
+                        captionWordHighlight
+                          ? 'bg-[#1c2233] border-[#3b82f6] text-blue-300'
+                          : 'bg-[#14161c] border-[#222631] text-slate-400'
+                      }`}
+                    >
+                      {captionWordHighlight ? 'Word Highlight: ON' : 'Word Highlight: OFF'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* AI Detection & Limits */}
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-[#1d212b]">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Moment Detection Mode</label>
+                    <select
+                      value={momentDetectionMode}
+                      onChange={(e) => setMomentDetectionMode(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded bg-[#14161c] border border-[#222631] text-xs text-white"
+                    >
+                      <option value="heuristic">Heuristic (Energy & Audio Density)</option>
+                      <option value="gemini">Gemini LLM Reasoner</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4">
+                    <span className="text-[11px] text-slate-400">Scene Cut Snapping:</span>
+                    <input
+                      type="checkbox"
+                      checked={enableSceneDetection}
+                      onChange={(e) => setEnableSceneDetection(e.target.checked)}
+                      className="rounded accent-[#2563eb]"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Submit Action */}
           <div className="pt-3 border-t border-[#222631] flex items-center justify-between">
             <span className="text-[11px] text-slate-500 font-mono">
-              Otomatis 9:16 reframe + transkrip Whisper
+              Durasi: {minClipDuration}s–{maxClipDuration}s • 13-stage pipeline
             </span>
             <button
               type="submit"
@@ -164,9 +343,32 @@ export default function GenerateView({
             </button>
           </div>
         </form>
+
+        {/* Clippo Sync Panel (from master) */}
+        {showClippo && (
+          <div className="mt-4 pt-4 border-t border-[#222631] bg-[#0c0d11] p-3.5 rounded-md border border-[#1d212b]">
+            <div className="text-xs font-semibold text-white mb-2">Sync Task from Clippo.id</div>
+            <form onSubmit={handleClippoSync} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Clippo Task ID (e.g. 70274198…)"
+                value={clippoId}
+                onChange={(e) => setClippoId(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded bg-[#14161c] border border-[#222631] text-xs text-white"
+              />
+              <button
+                type="submit"
+                disabled={clippoSubmitting || !clippoId.trim()}
+                className="px-3 py-1.5 rounded bg-[#222631] hover:bg-[#2b3140] text-slate-200 text-xs font-medium disabled:opacity-50"
+              >
+                {clippoSubmitting ? 'Syncing…' : 'Sync Task'}
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
-      {/* Active Pipeline Status (jika ada job aktif) */}
+      {/* Active Pipeline Status (Processing Workspace from master) */}
       {activeJob && (
         <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4 space-y-3">
           <div className="flex items-center justify-between">
