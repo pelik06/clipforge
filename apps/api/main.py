@@ -130,16 +130,16 @@ class JobCreateRequest(BaseModel):
     framing_mode: Optional[str] = "auto_follow_speaker"
     caption_preset: Optional[str] = "clean"
     caption_language: Optional[str] = "auto"
-    caption_size: Optional[str] = "medium"
+    caption_size: Optional[str] = "large"
     caption_position: Optional[str] = "bottom_safe"
     caption_text_color: Optional[str] = "#FFFFFF"
     caption_highlight_color: Optional[str] = "#FFFF00"
     caption_word_highlight: Optional[bool] = False
     moment_detection_mode: Optional[str] = "heuristic"
     moment_detection_provider: Optional[str] = "heuristic"
-    max_clips: Optional[int] = 3
+    max_clips: Optional[int] = 5
     min_clip_duration: Optional[float] = 45.0
-    max_clip_duration: Optional[float] = 90.0
+    max_clip_duration: Optional[float] = 120.0
     enable_scene_detection: Optional[bool] = True
     moment_threshold: Optional[float] = 0.45
 
@@ -250,17 +250,16 @@ async def create_job(req: JobCreateRequest, background_tasks: BackgroundTasks):
         framing_mode=req.framing_mode or "auto_follow_speaker",
         caption_preset=req.caption_preset or "clean",
         caption_language=req.caption_language or "auto",
-        caption_size=req.caption_size or "medium",
+        caption_size=req.caption_size or "large",
         caption_position=req.caption_position or "bottom_safe",
         caption_text_color=req.caption_text_color or "#FFFFFF",
         caption_highlight_color=req.caption_highlight_color or "#FFFF00",
         caption_word_highlight=bool(req.caption_word_highlight),
         moment_detection_mode=req.moment_detection_mode or "heuristic",
         moment_detection_provider=req.moment_detection_provider or "heuristic",
-        max_clips=int(req.max_clips or 3),
+        max_clips=int(req.max_clips or 5),
         min_clip_duration=float(req.min_clip_duration or 45.0),
-        max_clip_duration=float(req.max_clip_duration or 90.0),
-        enable_scene_detection=bool(req.enable_scene_detection if req.enable_scene_detection is not None else True),
+        max_clip_duration=float(req.max_clip_duration or 120.0),
         moment_threshold=float(req.moment_threshold or 0.45),
     )
     try:

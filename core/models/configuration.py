@@ -17,6 +17,8 @@ class CaptionPreset(str, Enum):
     CLEAN = "clean"
     CREATOR_BOLD = "creator_bold"
     KARAOKE = "karaoke"
+    VIRAL_BEAST = "viral_beast"
+    NEON_CYAN = "neon_cyan"
     MINIMAL = "minimal"
     NO_CAPTIONS = "no_captions"
 
@@ -31,6 +33,7 @@ class CaptionSize(str, Enum):
     SMALL = "small"
     MEDIUM = "medium"
     LARGE = "large"
+    EXTRA_LARGE = "extra_large"
 
 
 class CaptionPosition(str, Enum):
@@ -76,8 +79,8 @@ class JobConfig:
     moment_detection_mode: str = MomentDetectionMode.HEURISTIC.value
     moment_detection_provider: str = MomentDetectionProvider.HEURISTIC.value
     min_clips: int = 1
-    max_clips: int = 3
-    min_clip_duration: float = 30.0
+    max_clips: int = 5
+    min_clip_duration: float = 45.0
     max_clip_duration: float = 120.0
     enable_scene_detection: bool = True
     moment_threshold: float = 0.45
@@ -101,7 +104,7 @@ class JobConfig:
         self.caption_text_color = validate_hex_color(self.caption_text_color, "caption_text_color")
         self.caption_highlight_color = validate_hex_color(self.caption_highlight_color, "caption_highlight_color")
 
-        if self.caption_preset == CaptionPreset.KARAOKE.value:
+        if self.caption_preset in (CaptionPreset.KARAOKE.value, CaptionPreset.VIRAL_BEAST.value):
             self.caption_word_highlight = True
         if self.moment_detection_mode not in [m.value for m in MomentDetectionMode]:
             raise ValueError(f"Invalid moment_detection_mode: '{self.moment_detection_mode}'. Allowed: {[m.value for m in MomentDetectionMode]}")

@@ -376,11 +376,12 @@ class CaptionRenderer:
 
         # Font sizes mapped relative to vertical 1080x1920 resolution
         size_map = {
-            CaptionSize.SMALL.value: 48,
-            CaptionSize.MEDIUM.value: 62,
-            CaptionSize.LARGE.value: 78,
+            CaptionSize.SMALL.value: 56,
+            CaptionSize.MEDIUM.value: 74,
+            CaptionSize.LARGE.value: 92,
+            CaptionSize.EXTRA_LARGE.value: 110,
         }
-        font_size = size_map.get(cfg.caption_size, 62)
+        font_size = size_map.get(cfg.caption_size, 92)
 
         # Position alignment (ASS Alignment: 2 = Bottom Center, 5 = Middle Center, 8 = Top Center)
         pos_map = {
@@ -396,7 +397,27 @@ class CaptionRenderer:
                 alignment = safe_res.target_alignment
                 margin_v = safe_res.margin_v
         # Preset-specific overrides
-        if preset == CaptionPreset.CREATOR_BOLD.value:
+        if preset == CaptionPreset.VIRAL_BEAST.value:
+            font_name = "Impact"
+            bold = -1
+            outline = 5
+            shadow = 3
+            text_color_ass = "&H0000FFFF&"
+            highlight_color_ass = "&H0000FF00&"
+            outline_color = "&H00000000&"
+            back_color = "&H80000000&"
+            font_size = int(round(font_size * 1.15))
+        elif preset == CaptionPreset.NEON_CYAN.value:
+            font_name = "Arial Black"
+            bold = -1
+            outline = 4
+            shadow = 2
+            text_color_ass = "&H00FFFF00&"
+            highlight_color_ass = "&H00FFFFFF&"
+            outline_color = "&H004A1500&"
+            back_color = "&H80000000&"
+            font_size = int(round(font_size * 1.05))
+        elif preset == CaptionPreset.CREATOR_BOLD.value:
             font_name = "Impact"
             bold = -1
             outline = 4
@@ -445,9 +466,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         events = []
         is_highlight_active = (
-            preset == CaptionPreset.KARAOKE.value or cfg.caption_word_highlight
+            preset in (CaptionPreset.KARAOKE.value, CaptionPreset.VIRAL_BEAST.value, CaptionPreset.NEON_CYAN.value)
+            or cfg.caption_word_highlight
         )
-
         if preset == CaptionPreset.KARAOKE.value:
             for s in segments:
                 if not s.words or len(s.words) == 0:

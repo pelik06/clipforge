@@ -51,20 +51,19 @@ export default function Dashboard() {
   const [systemDeps, setSystemDeps] = useState(null);
   const [banner, setBanner] = useState(null);
   const [framingMode, setFramingMode] = useState('auto_follow_speaker');
-  const [captionPreset, setCaptionPreset] = useState('clean');
+  const [captionPreset, setCaptionPreset] = useState('karaoke');
   const [captionLanguage, setCaptionLanguage] = useState('auto');
-  const [captionSize, setCaptionSize] = useState('medium');
+  const [captionSize, setCaptionSize] = useState('large');
   const [captionPosition, setCaptionPosition] = useState('bottom_safe');
   const [captionTextColor, setCaptionTextColor] = useState('#FFFFFF');
   const [captionHighlightColor, setCaptionHighlightColor] = useState('#FFFF00');
-  const [captionWordHighlight, setCaptionWordHighlight] = useState(false);
+  const [captionWordHighlight, setCaptionWordHighlight] = useState(true);
   const [showAdvancedCaptions, setShowAdvancedCaptions] = useState(false);
   const [momentDetectionMode, setMomentDetectionMode] = useState('heuristic');
   const [momentDetectionProvider, setMomentDetectionProvider] = useState('heuristic');
-  const [maxClips, setMaxClips] = useState(3);
+  const [maxClips, setMaxClips] = useState(5);
   const [minClipDuration, setMinClipDuration] = useState(45);
-  const [maxClipDuration, setMaxClipDuration] = useState(90);
-  const [targetDurationPreset, setTargetDurationPreset] = useState('medium');
+  const [maxClipDuration, setMaxClipDuration] = useState(120);
   const [enableSceneDetection, setEnableSceneDetection] = useState(true);
 
   const [jobs, setJobs] = useState([]);
@@ -275,7 +274,7 @@ export default function Dashboard() {
           caption_word_highlight: captionWordHighlight,
           moment_detection_mode: 'heuristic',
           moment_detection_provider: 'heuristic',
-          max_clips: 3,
+          max_clips: maxClips,
           min_clip_duration: minClipDuration,
           max_clip_duration: maxClipDuration,
           enable_scene_detection: true,
@@ -579,38 +578,34 @@ export default function Dashboard() {
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-950/50 border border-emerald-800/80 text-[11px] font-mono text-emerald-300 flex items-center space-x-1.5">
                   <Clock className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Clips:</span>
-                  <span className="font-semibold text-slate-100">Max 3 ({minClipDuration}s – {maxClipDuration}s)</span>
+                  <span className="font-semibold text-slate-100">Max 5 (45s – 120s)</span>
                 </span>
               </div>
 
-              {/* Target Duration Preset Selector */}
+              {/* Caption Position Selector */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-xs font-mono uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Target Clip Duration (Context & Thought Length)</span>
+                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Lokasi Penempatan Caption</span>
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
-                    { id: 'short', min: 30, max: 60, label: 'Short (30s – 60s)', desc: 'Quick hook / snippet' },
-                    { id: 'medium', min: 45, max: 90, label: 'Medium (45s – 90s)', desc: 'Viral sweet spot & full story' },
-                    { id: 'long', min: 60, max: 150, label: 'Long (60s – 150s)', desc: 'Podcast deep dive / complete topic' }
-                  ].map((d) => (
+                    { id: 'top_safe', label: '↑ Atas (Top)', desc: 'Area atas bebas kepala/wajah' },
+                    { id: 'center', label: '↔ Tengah (Center)', desc: 'Tepat di tengah vertikal' },
+                    { id: 'bottom_safe', label: '↓ Bawah (Bottom)', desc: 'Bawah safe-area (Standar)' }
+                  ].map((pos) => (
                     <button
-                      key={d.id}
+                      key={pos.id}
                       type="button"
-                      onClick={() => {
-                        setTargetDurationPreset(d.id);
-                        setMinClipDuration(d.min);
-                        setMaxClipDuration(d.max);
-                      }}
-                      className={`p-2.5 rounded-xl border text-left transition ${
-                        targetDurationPreset === d.id
-                          ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-100 shadow-md shadow-emerald-950/40'
+                      onClick={() => setCaptionPosition(pos.id)}
+                      className={`p-2 rounded-xl border text-left transition ${
+                        captionPosition === pos.id
+                          ? 'bg-cyan-950/60 border-cyan-500/80 text-cyan-100 shadow-md shadow-cyan-950/40'
                           : 'bg-slate-900/60 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                       }`}
                     >
-                      <div className="text-xs font-semibold">{d.label}</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{d.desc}</div>
+                      <div className="text-xs font-semibold">{pos.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{pos.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -634,7 +629,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Visual Caption Preset Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
                   {[
                     {
                       id: 'clean',
@@ -697,6 +692,42 @@ export default function Dashboard() {
                       ),
                     },
                     {
+                      id: 'viral_beast',
+                      label: 'Viral Beast',
+                      desc: 'MrBeast yellow & green',
+                      renderPreview: () => (
+                        <div
+                          style={{
+                            color: '#FFDE00',
+                            fontFamily: 'Impact, sans-serif',
+                            textShadow: '0 2px 3px rgba(0,0,0,0.95), 0 0 2px #000',
+                          }}
+                          className="text-[11px] leading-tight text-center uppercase tracking-wide"
+                        >
+                          <span>THIS IS </span>
+                          <span style={{ color: '#00FF66', textDecoration: 'underline' }}>VIRAL</span>
+                        </div>
+                      ),
+                    },
+                    {
+                      id: 'neon_cyan',
+                      label: 'Neon Cyan',
+                      desc: 'Cyberpunk bright glow',
+                      renderPreview: () => (
+                        <div
+                          style={{
+                            color: '#00FFFF',
+                            fontFamily: 'Arial Black, sans-serif',
+                            textShadow: '0 0 8px rgba(0,255,255,0.8), 0 2px 3px #000',
+                          }}
+                          className="text-[10px] leading-tight text-center font-black"
+                        >
+                          <span>CYBER </span>
+                          <span style={{ color: '#FFFFFF', textDecoration: 'underline' }}>GLOW</span>
+                        </div>
+                      ),
+                    },
+                    {
                       id: 'minimal',
                       label: 'Minimal',
                       desc: 'Clean subtle subtitle',
@@ -729,7 +760,7 @@ export default function Dashboard() {
                         type="button"
                         onClick={() => {
                           setCaptionPreset(p.id);
-                          if (p.id === 'karaoke') setCaptionWordHighlight(true);
+                          if (p.id === 'karaoke' || p.id === 'viral_beast' || p.id === 'neon_cyan') setCaptionWordHighlight(true);
                         }}
                         className={`rounded-xl border text-left transition flex flex-col overflow-hidden group ${
                           isSelected
@@ -786,9 +817,10 @@ export default function Dashboard() {
                               onChange={(e) => setCaptionSize(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
                             >
-                              <option value="small">Small</option>
-                              <option value="medium">Medium</option>
-                              <option value="large">Large</option>
+                              <option value="small">Small (56pt)</option>
+                              <option value="medium">Medium (74pt)</option>
+                              <option value="large">Large (92pt - Recommended)</option>
+                              <option value="extra_large">Extra Large (110pt)</option>
                             </select>
                           </div>
                         </div>
