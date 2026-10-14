@@ -17,7 +17,7 @@ data/input/*
 data/work/*
 data/output/*
 data/archive/*
-
+data/cache/*
 # OS / IDE
 .DS_Store
 Thumbs.db

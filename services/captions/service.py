@@ -13,7 +13,7 @@ from core.models.configuration import (
     JobConfig,
 )
 from core.models.transcript import TranscriptSegment, Word
-
+from services.captions.safe_area import CaptionSafeAreaManager
 
 def hex_to_ass_color(hex_color: str, alpha: str = "00") -> str:
     """Convert #RRGGBB or #RGB to ASS format &H<AA><BB><GG><RR>&."""
@@ -127,11 +127,70 @@ def adjust_segments_for_clip(
     return adjusted
 
 
+def is_emphasis_word(word: str) -> bool:
+    """Identify if a word qualifies for visual emphasis (numbers, superlatives, strong keywords)."""
+    clean = re.sub(r"[^\w]", "", word).lower()
+    if not clean:
+        return False
+    if clean.isdigit() or any(c.isdigit() for c in clean):
+        return True
+    emphasis_keywords = {
+        "terbesar", "terbaik", "kunci", "bahaya", "penting", "rahasia",
+        "masalah", "fakta", "sukses", "gagal", "rugi", "untung", "solusi",
+        "crucial", "huge", "best", "worst", "secret", "never", "always",
+        "pertama", "terakhir", "miliar", "juta", "persen", "100%"
+    }
+    return clean in emphasis_keywords
+
+
+def group_words_into_adaptive_chunks(
+    words: List[Word],
+    words_per_group: int = 4,
+    min_words_per_group: int = 1,
+) -> List[List[Word]]:
+    """Group words into balanced chunks (1 to 4 words), splitting adaptively on punctuation and speech pauses."""
+    if not words:
+        return []
+    max_words = max(1, int(words_per_group))
+    min_words = max(1, min(int(min_words_per_group), max_words))
+    chunks: List[List[Word]] = []
+    current_chunk: List[Word] = []
+
+    for i, w in enumerate(words):
+        current_chunk.append(w)
+        w_text = w.text.strip()
+
+        has_punctuation = bool(w_text and w_text[-1] in {".", ",", "!", "?", ";", ":"})
+        has_pause = False
+        if i < len(words) - 1:
+            nxt = words[i + 1]
+            if (nxt.start - w.end) > 0.45:
+                has_pause = True
+
+        is_long = len(w_text) >= 12
+
+        should_split = (
+            len(current_chunk) >= max_words
+            or (len(current_chunk) >= min_words and (has_punctuation or has_pause or is_long))
+        )
+
+        if should_split:
+            chunks.append(current_chunk)
+            current_chunk = []
+
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
+
+
 def group_words_into_chunks(
     words: List[Word],
     words_per_group: int = 4,
+    adaptive: bool = False,
 ) -> List[List[Word]]:
     """Group sequential words into balanced chunks (default 4 words) for vertical 9:16 readability."""
+    if adaptive:
+        return group_words_into_adaptive_chunks(words, words_per_group=words_per_group)
     if not words:
         return []
     chunk_size = max(1, int(words_per_group))
@@ -139,7 +198,6 @@ def group_words_into_chunks(
     for i in range(0, len(words), chunk_size):
         chunks.append(words[i : i + chunk_size])
     return chunks
-
 
 def build_word_chunks_from_segment(
     seg: TranscriptSegment,
@@ -288,8 +346,8 @@ class CaptionRenderer:
         video_height: int = 1920,
         clip_start: float = 0.0,
         clip_end: Optional[float] = None,
+        face_boxes: Optional[List[Tuple[float, float, float, float]]] = None,
     ) -> str:
-        """Generate complete ASS subtitle script content matching user preset, 4-word grouping, and styling."""
         cfg = config or JobConfig()
         words_per_group = getattr(cfg, "caption_words_per_group", self.settings.caption_words_per_group)
 
@@ -316,7 +374,12 @@ class CaptionRenderer:
             CaptionPosition.TOP_SAFE.value: (8, 280),
         }
         alignment, margin_v = pos_map.get(cfg.caption_position, (2, 280))
-
+        if face_boxes:
+            safe_mgr = CaptionSafeAreaManager()
+            safe_res = safe_mgr.resolve_caption_position(face_boxes, preferred_position=cfg.caption_position)
+            if safe_res.collision_avoided:
+                alignment = safe_res.target_alignment
+                margin_v = safe_res.margin_v
         # Preset-specific overrides
         if preset == CaptionPreset.CREATOR_BOLD.value:
             font_name = "Impact"
@@ -428,8 +491,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if w.end > max_dur:
                     w.end = max_dur
 
-        # 5. Group words into balanced chunks
-        chunks = group_words_into_chunks(cleaned_words, words_per_group=words_per_group)
+        # 5. Group words into balanced adaptive chunks (P2.3.1)
+        chunks = group_words_into_adaptive_chunks(cleaned_words, words_per_group=words_per_group)
         # 5. Build non-overlapping Dialogue events
         for chunk_idx, chunk in enumerate(chunks):
             if chunk and chunk[0].text and chunk[0].text[0].islower():
@@ -473,7 +536,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     line_text = " ".join(phrase_parts)
                     events.append(f"Dialogue: 0,{w_start_str},{w_end_str},Default,,0,0,0,,{line_text}")
             else:
-                chunk_text = escape_ass_text(" ".join([w.text for w in chunk]))
+                phrase_parts = []
+                for w in chunk:
+                    w_clean = escape_ass_text(w.text)
+                    if preset != CaptionPreset.NO_CAPTIONS.value and is_emphasis_word(w.text):
+                        phrase_parts.append(f"{{\\c{highlight_color_ass}\\b1}}{w_clean}{{\\rDefault}}")
+                    else:
+                        phrase_parts.append(w_clean)
+                chunk_text = " ".join(phrase_parts)
                 start_str = format_ass_time(chunk_start)
                 end_str = format_ass_time(chunk_end)
                 start_cs = parse_ass_time(start_str)
@@ -491,8 +561,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         config: Optional[JobConfig] = None,
         clip_start: float = 0.0,
         clip_end: Optional[float] = None,
+        face_boxes: Optional[List[Tuple[float, float, float, float]]] = None,
     ) -> Dict[str, Any]:
-        """Burn captions into video using FFmpeg and libass, adjusting for clip timeline offset."""
         cfg = config or JobConfig()
         src = Path(video_path)
         if not src.exists():
@@ -539,6 +609,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             video_height=1920,
             clip_start=clip_start,
             clip_end=clip_end,
+            face_boxes=face_boxes,
         )
 
         work_dir = Path(self.settings.data_dir) / "work"

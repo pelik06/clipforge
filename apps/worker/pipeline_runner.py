@@ -229,7 +229,7 @@ def execute_job_pipeline_sync(
     transcript_segments: List[TranscriptSegment] = []
     scored_candidates: List[Any] = []
     reframe_analyses: List[Any] = []
-
+    detected_reactions: List[Any] = []
     # --- STAGE 0: Source validation ---
     t0 = time.time()
     update_stage(0, "running", detail="Validating input source...")
@@ -610,15 +610,42 @@ def execute_job_pipeline_sync(
     t12 = time.time()
     update_stage(12, "running", detail=f"Registering {len(final_files)} clips into review queue for operator approval...")
     try:
+        from services.clip_quality import ClipQualityAnalyzer
+        from services.recommendation import RecommendationEngine
+
+        analyzer = ClipQualityAnalyzer()
+        rec_engine = RecommendationEngine(default_top_k=job_cfg.max_clips or 5)
+        raw_clip_objs = []
+        quality_map = {}
+
         for idx, (f_path, cand, qc_chk) in enumerate(zip(final_files, scored_candidates, qc_results), 1):
             rf_analysis = reframe_analyses[idx - 1] if idx <= len(reframe_analyses) else None
             c_id = f"clip_{uuid.uuid4().hex[:6]}"
+            clip_segs = [s for s in transcript_segments if s.end > cand.start and s.start < cand.end]
+            clip_text = " ".join([s.text for s in clip_segs]) or "Conversational highlight moment"
+            clip_sents = [s.text for s in clip_segs]
+
+            q_feat = analyzer.analyze_clip(
+                clip_id=c_id,
+                text=clip_text,
+                duration=cand.duration,
+                sentences=clip_sents,
+                audio_reactions=detected_reactions,
+                clip_start=cand.start,
+                clip_end=cand.end,
+                active_speaker_confidence=0.88 if (rf_analysis and getattr(rf_analysis, "active_speaker_available", False)) else 0.5,
+                face_detected=bool(rf_analysis and getattr(rf_analysis, "face_detection_available", True)),
+                layout_mode=getattr(rf_analysis, "layout_mode", "TRACK") if rf_analysis else "TRACK",
+            )
+            quality_map[c_id] = q_feat
+
             clip_obj = {
                 "id": c_id,
                 "job_id": job_id,
                 "title": f"Highlight #{idx}: {source_title[:38]} [{cand.start:.1f}s-{cand.end:.1f}s]",
                 "duration": f"{cand.duration:.1f}s",
-                "score": f"{int(round(cand.score))}/100",
+                "score": f"{int(round(q_feat.breakdown.total))}/100",
+                "score_raw": q_feat.breakdown.total,
                 "status": "WAITING_APPROVAL",
                 "vod": source_title,
                 "is_fixture": False,
@@ -643,11 +670,15 @@ def execute_job_pipeline_sync(
                 "audio_reaction_confidence": 0.85 if any("reaction" in r.lower() for r in cand.reasons) else 0.0,
                 "variant": getattr(cand, "variant", "normal"),
                 "parent_moment_id": getattr(cand, "parent_moment_id", None),
+                "text": clip_text,
                 "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
+            raw_clip_objs.append(clip_obj)
+
+        recommended_clips = rec_engine.recommend_clips(raw_clip_objs, quality_map=quality_map)
+        for clip_obj in recommended_clips:
             save_clip(clip_obj)
             rendered_clips.append(clip_obj)
-
         update_stage(12, "completed", detail=f"All {len(rendered_clips)} clips registered in review queue. Awaiting human operator approval.", elapsed=round(time.time() - t12, 2))
 
         # Job complete and awaiting review

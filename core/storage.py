@@ -103,6 +103,11 @@ def init_db(db_path: Optional[Path] = None) -> None:
             "audio_reaction_confidence": "REAL DEFAULT 0.0",
             "variant": "TEXT DEFAULT 'normal'",
             "parent_moment_id": "TEXT DEFAULT NULL",
+            "ranking": "INTEGER DEFAULT NULL",
+            "is_recommended": "INTEGER DEFAULT 0",
+            "quality_breakdown": "TEXT DEFAULT '{}'",
+            "why_this_clip": "TEXT DEFAULT '[]'",
+            "recommendation_reasons": "TEXT DEFAULT '[]'",
         }
         for col_name, col_def in clip_column_defs.items():
             if col_name not in existing_clip_cols:
@@ -212,8 +217,8 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 is_fixture, is_real_media, media_type, render_status, render_notice,
                 media_url, start_time, end_time, resolution, qc_json, created_at, reviewed_at,
                 speaker_track_id, speaker_confidence, layout_mode, audio_reaction, audio_reaction_confidence,
-                variant, parent_moment_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                variant, parent_moment_id, ranking, is_recommended, quality_breakdown, why_this_clip, recommendation_reasons
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 reviewed_at = excluded.reviewed_at,
@@ -227,7 +232,12 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 audio_reaction = COALESCE(excluded.audio_reaction, clips.audio_reaction),
                 audio_reaction_confidence = COALESCE(excluded.audio_reaction_confidence, clips.audio_reaction_confidence),
                 variant = COALESCE(excluded.variant, clips.variant),
-                parent_moment_id = COALESCE(excluded.parent_moment_id, clips.parent_moment_id);
+                parent_moment_id = COALESCE(excluded.parent_moment_id, clips.parent_moment_id),
+                ranking = COALESCE(excluded.ranking, clips.ranking),
+                is_recommended = COALESCE(excluded.is_recommended, clips.is_recommended),
+                quality_breakdown = COALESCE(excluded.quality_breakdown, clips.quality_breakdown),
+                why_this_clip = COALESCE(excluded.why_this_clip, clips.why_this_clip),
+                recommendation_reasons = COALESCE(excluded.recommendation_reasons, clips.recommendation_reasons);
             """,
             (
                 clip["id"],
@@ -256,6 +266,11 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 float(clip.get("audio_reaction_confidence") or 0.0),
                 clip.get("variant", "normal"),
                 clip.get("parent_moment_id"),
+                clip.get("ranking"),
+                1 if clip.get("is_recommended") else 0,
+                json.dumps(clip.get("quality_breakdown", {})),
+                json.dumps(clip.get("why_this_clip", [])),
+                json.dumps(clip.get("recommendation_reasons", [])),
             ),
         )
         conn.commit()
@@ -365,4 +380,9 @@ def _format_clip_row(row: sqlite3.Row) -> Dict[str, Any]:
         "audio_reaction_confidence": float(row["audio_reaction_confidence"] or 0.0) if "audio_reaction_confidence" in row.keys() else 0.0,
         "variant": row["variant"] if "variant" in row.keys() and row["variant"] else "normal",
         "parent_moment_id": row["parent_moment_id"] if "parent_moment_id" in row.keys() else None,
+        "ranking": row["ranking"] if "ranking" in row.keys() else None,
+        "is_recommended": bool(row["is_recommended"]) if "is_recommended" in row.keys() and row["is_recommended"] is not None else False,
+        "quality_breakdown": json.loads(row["quality_breakdown"]) if "quality_breakdown" in row.keys() and row["quality_breakdown"] else {},
+        "why_this_clip": json.loads(row["why_this_clip"]) if "why_this_clip" in row.keys() and row["why_this_clip"] else [],
+        "recommendation_reasons": json.loads(row["recommendation_reasons"]) if "recommendation_reasons" in row.keys() and row["recommendation_reasons"] else [],
     }

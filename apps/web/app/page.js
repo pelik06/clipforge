@@ -72,6 +72,8 @@ export default function Dashboard() {
   const [fixtures, setFixtures] = useState([]);
   const [activeTab, setActiveTab] = useState('real');
   const [typeFilter, setTypeFilter] = useState('all'); // all, tight, extended, split, reaction
+  const [recommendedOnly, setRecommendedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('score_desc');
   const [actionLoading, setActionLoading] = useState({});
 
   const pollIntervalRef = useRef(null);
@@ -289,13 +291,38 @@ export default function Dashboard() {
   };
 
   const displayedClips = activeTab === 'real' ? clips : fixtures;
-  const filteredClips = displayedClips.filter((clip) => {
-    if (typeFilter === 'tight' && clip.variant !== 'tight') return false;
-    if (typeFilter === 'extended' && clip.variant !== 'extended') return false;
-    if (typeFilter === 'split' && clip.layout_mode !== 'SPLIT') return false;
-    if (typeFilter === 'reaction' && !clip.audio_reaction) return false;
-    return true;
-  });
+  const filteredClips = displayedClips
+    .filter((clip) => {
+      if (recommendedOnly && !clip.is_recommended) return false;
+      if (typeFilter === 'tight' && clip.variant !== 'tight') return false;
+      if (typeFilter === 'extended' && clip.variant !== 'extended') return false;
+      if (typeFilter === 'split' && clip.layout_mode !== 'SPLIT') return false;
+      if (typeFilter === 'reaction' && !clip.audio_reaction) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'score_desc') {
+        const sa = parseFloat(String(a.score || "0").split("/")[0]) || 0;
+        const sb = parseFloat(String(b.score || "0").split("/")[0]) || 0;
+        return sb - sa;
+      }
+      if (sortBy === 'newest') {
+        const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return db - da;
+      }
+      if (sortBy === 'shortest') {
+        const da = parseFloat(a.duration) || 0;
+        const db = parseFloat(b.duration) || 0;
+        return da - db;
+      }
+      if (sortBy === 'longest') {
+        const da = parseFloat(a.duration) || 0;
+        const db = parseFloat(b.duration) || 0;
+        return db - da;
+      }
+      return 0;
+    });
   const currentJob = selectedJobData || jobs.find(j => j.id === selectedJobId) || jobs[0];
 
   return (
@@ -1054,6 +1081,28 @@ export default function Dashboard() {
 
             {/* Type Filters & Segment Toggle */}
             <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Sorting and Recommendation Toggle */}
+              <div className="flex items-center space-x-2 text-xs font-mono">
+                <label className="flex items-center space-x-1 cursor-pointer bg-slate-950 px-2 py-1 rounded-xl border border-slate-800 text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={recommendedOnly}
+                    onChange={(e) => setRecommendedOnly(e.target.checked)}
+                    className="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-0"
+                  />
+                  <span className="text-[11px]">★ Recommended</span>
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 text-slate-300 px-2 py-1 rounded-xl text-[11px] font-mono"
+                >
+                  <option value="score_desc">Best Score</option>
+                  <option value="newest">Newest</option>
+                  <option value="shortest">Shortest</option>
+                  <option value="longest">Longest</option>
+                </select>
+              </div>
               {/* Type Filters */}
               <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px] font-mono">
                 {[
@@ -1204,6 +1253,18 @@ export default function Dashboard() {
                             </span>
                           )}
 
+                          {/* P2 Rank & Recommendation Badges */}
+                          {clip.ranking && (
+                            <span className="bg-amber-500/20 text-amber-300 border border-amber-600 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                              #{clip.ranking}
+                            </span>
+                          )}
+                          {clip.is_recommended && (
+                            <span className="bg-emerald-950 text-emerald-300 border border-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                              ★ RECOMMENDED
+                            </span>
+                          )}
+
                           {/* P1 Metadata Badges */}
                           {clip.speaker_track_id && (
                             <span className="bg-sky-950/80 text-sky-300 border border-sky-800/80 px-1.5 py-0.5 rounded text-[10px] font-mono">
@@ -1276,6 +1337,46 @@ export default function Dashboard() {
                           <span className="text-slate-500 uppercase font-bold">Status: </span>
                           {clip.render_notice}
                         </div>
+                      )}
+
+                      {/* Why this clip? Explanation (P2.8) */}
+                      {((clip.why_this_clip && clip.why_this_clip.length > 0) || (clip.recommendation_reasons && clip.recommendation_reasons.length > 0)) && (
+                        <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 text-xs space-y-1">
+                          <div className="text-[11px] font-bold text-slate-300 font-mono flex items-center justify-between">
+                            <span>Why this clip?</span>
+                            {clip.score && <span className="text-emerald-400 font-mono font-bold">{clip.score}</span>}
+                          </div>
+                          <ul className="text-[11px] text-slate-400 space-y-0.5 font-sans">
+                            {(clip.why_this_clip || clip.recommendation_reasons || []).slice(0, 4).map((r, r_idx) => (
+                              <li key={r_idx} className="flex items-start space-x-1.5">
+                                <span className="text-emerald-400">✓</span>
+                                <span>{r}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Score Breakdown (P2.8) */}
+                      {clip.quality_breakdown && Object.keys(clip.quality_breakdown).length > 0 && (
+                        <details className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-[11px] font-mono text-slate-400">
+                          <summary className="cursor-pointer text-indigo-400 hover:text-indigo-300 font-bold select-none">
+                            View Quality Score Breakdown (8 Factors)
+                          </summary>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-2 text-[10px]">
+                            <div>Semantic Quality: <span className="text-slate-200">{clip.quality_breakdown.semantic || 0}/35</span></div>
+                            <div>Hook Strength: <span className="text-slate-200">{clip.quality_breakdown.hook || 0}/15</span></div>
+                            <div>Payoff / Resolution: <span className="text-slate-200">{clip.quality_breakdown.payoff || 0}/10</span></div>
+                            <div>Information Density: <span className="text-slate-200">{clip.quality_breakdown.information || 0}/10</span></div>
+                            <div>Audio / Emotion: <span className="text-slate-200">{clip.quality_breakdown.emotion || 0}/10</span></div>
+                            <div>Speaker & Layout: <span className="text-slate-200">{clip.quality_breakdown.speaker_framing || 0}/10</span></div>
+                            <div>Caption Quality: <span className="text-slate-200">{clip.quality_breakdown.caption || 0}/5</span></div>
+                            <div>Duration & Continuity: <span className="text-slate-200">{clip.quality_breakdown.duration_continuity || 0}/5</span></div>
+                            <div className="col-span-2 border-t border-slate-800 pt-1 font-bold text-emerald-400">
+                              Total Score: {clip.quality_breakdown.total || 0}/100
+                            </div>
+                          </div>
+                        </details>
                       )}
                     </div>
 
