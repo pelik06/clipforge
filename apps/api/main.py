@@ -24,8 +24,10 @@ from apps.worker.pipeline_runner import (
     create_initial_stages,
     execute_job_pipeline_sync,
 )
+from services.render import RenderJobManager, get_preset_config
 from services.ingest.service import check_media_dependencies
 
+render_manager = RenderJobManager()
 app = FastAPI(title="ClipForge API", version="0.4.0")
 
 # Enable CORS for Next.js frontend (port 3000) and other dev origins
@@ -137,7 +139,19 @@ class ClippoSyncRequest(BaseModel):
     clippo_job_id: str
     vod_url: str
 
+class RenderSubmitRequest(BaseModel):
+    clip_id: str
+    preset: str = "tiktok"
+    render_type: str = "final"
+    priority: int = 10
+    config: Optional[dict] = None
 
+
+class BatchRenderRequest(BaseModel):
+    clip_ids: list[str]
+    preset: str = "tiktok"
+    render_type: str = "final"
+    priority: int = 10
 async def run_pipeline_background(job_id: str, vod_url: str, kind: str, config: Optional[dict] = None):
     """Run the 13-stage pipeline in an async executor thread."""
     loop = asyncio.get_event_loop()
@@ -350,11 +364,118 @@ async def sync_clippo_task(req: ClippoSyncRequest, background_tasks: BackgroundT
         "message": "Successfully synchronized with clippo.id and queued 13-stage pipeline.",
     }
 
+@app.post("/api/v4/renders")
+async def submit_render(req: RenderSubmitRequest, background_tasks: BackgroundTasks):
+    clips = list_clips()
+    target_clip = next((c for c in clips if c["id"] == req.clip_id), None)
+    if not target_clip:
+        for f in FIXTURES_STORE:
+            if f["id"] == req.clip_id:
+                target_clip = f
+                break
+
+    if not target_clip:
+        raise HTTPException(status_code=404, detail=f"Clip {req.clip_id} not found")
+
+    # Determine source file
+    source_path = target_clip.get("media_url")
+    if source_path and source_path.startswith("/media/"):
+        source_path = str(Path("data/output") / Path(source_path).name)
+    elif not source_path:
+        source_path = "data/input/real_talk_35s.mp4"
+
+    cfg = req.config or {}
+    if "start_time" not in cfg and target_clip.get("start_time") is not None:
+        cfg["start_time"] = target_clip.get("start_time", 0.0)
+    if "duration" not in cfg:
+        dur_str = str(target_clip.get("duration", "30.0")).replace("s", "")
+        try:
+            cfg["duration"] = float(dur_str)
+        except ValueError:
+            cfg["duration"] = 30.0
+
+    try:
+        job = render_manager.submit_job(
+            clip_id=req.clip_id,
+            source_id=source_path,
+            preset=req.preset,
+            render_type=req.render_type,
+            priority=req.priority,
+            config=cfg,
+        )
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+
+    background_tasks.add_task(render_manager.process_queue_sync, 1)
+    return {"status": "queued", "job": job.to_dict()}
+
+
+@app.get("/api/v4/renders")
+def get_renders(status: Optional[str] = None):
+    return {"renders": render_manager.list_jobs(status=status)}
+
+
+@app.get("/api/v4/renders/{job_id}")
+def get_render(job_id: str):
+    job = render_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Render job not found")
+    return {"job": job}
+
+
+@app.post("/api/v4/renders/{job_id}/cancel")
+def cancel_render(job_id: str):
+    ok = render_manager.cancel_job(job_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Render job not found")
+    return {"status": "cancelled", "job_id": job_id}
+
+
+@app.post("/api/v4/renders/{job_id}/retry")
+async def retry_render(job_id: str, background_tasks: BackgroundTasks):
+    job = render_manager.retry_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Render job not found or not retryable")
+    background_tasks.add_task(render_manager.process_queue_sync, 1)
+    return {"status": "retrying", "job": job.to_dict()}
+
+
+@app.post("/api/v4/renders/batch")
+async def batch_render(req: BatchRenderRequest, background_tasks: BackgroundTasks):
+    clips = list_clips()
+    created_jobs = []
+    for cid in req.clip_ids:
+        target_clip = next((c for c in clips if c["id"] == cid), None)
+        if not target_clip:
+            continue
+        source_path = target_clip.get("media_url")
+        if source_path and source_path.startswith("/media/"):
+            source_path = str(Path("data/output") / Path(source_path).name)
+        elif not source_path:
+            source_path = "data/input/real_talk_35s.mp4"
+        cfg = {"duration": float(str(target_clip.get("duration", "30.0")).replace("s", ""))}
+        job = render_manager.submit_job(
+            clip_id=cid,
+            source_id=source_path,
+            preset=req.preset,
+            render_type=req.render_type,
+            priority=req.priority,
+            config=cfg,
+        )
+        created_jobs.append(job.to_dict())
+
+    background_tasks.add_task(render_manager.process_queue_sync, len(created_jobs))
+    return {"status": "queued", "count": len(created_jobs), "jobs": created_jobs}
+
 
 # Mount generated media files directory
 media_dir = Path(__file__).resolve().parent.parent.parent / "data" / "output"
 media_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
+
+final_renders_dir = Path(__file__).resolve().parent.parent.parent / "data" / "renders" / "final"
+final_renders_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/renders", StaticFiles(directory=str(final_renders_dir)), name="renders")
 
 # Mount static Next.js export if present
 out_dir = Path(__file__).resolve().parent.parent.parent / "apps" / "web" / "out"

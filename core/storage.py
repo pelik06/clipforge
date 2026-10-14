@@ -68,6 +68,28 @@ def init_db(db_path: Optional[Path] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_clips_created ON clips(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_clips_job ON clips(job_id);
+
+            CREATE TABLE IF NOT EXISTS render_jobs (
+                id TEXT PRIMARY KEY,
+                clip_id TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL DEFAULT 0.0,
+                preset TEXT NOT NULL DEFAULT 'tiktok',
+                render_type TEXT NOT NULL DEFAULT 'final',
+                output_path TEXT,
+                output_sha256 TEXT,
+                error_message TEXT,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                priority INTEGER NOT NULL DEFAULT 10,
+                config_json TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_render_jobs_status ON render_jobs(status);
+            CREATE INDEX IF NOT EXISTS idx_render_jobs_created ON render_jobs(created_at DESC);
             """
         )
         cursor = conn.cursor()
@@ -339,6 +361,106 @@ def list_clips(job_id: Optional[str] = None, db_path: Optional[Path] = None) -> 
             rows = conn.execute("SELECT * FROM clips ORDER BY created_at DESC").fetchall()
         return [_format_clip_row(r) for r in rows]
 
+def save_render_job(job: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    init_db(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cfg_str = json.dumps(job.get("config", {}))
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO render_jobs (
+                id, clip_id, source_id, status, stage, progress,
+                preset, render_type, output_path, output_sha256, error_message,
+                retry_count, priority, config_json, created_at, started_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                stage = excluded.stage,
+                progress = excluded.progress,
+                output_path = excluded.output_path,
+                output_sha256 = excluded.output_sha256,
+                error_message = excluded.error_message,
+                retry_count = excluded.retry_count,
+                started_at = excluded.started_at,
+                completed_at = excluded.completed_at;
+            """,
+            (
+                job["id"],
+                job["clip_id"],
+                job.get("source_id", ""),
+                job.get("status", "QUEUED"),
+                job.get("stage", "Queued"),
+                float(job.get("progress", 0.0)),
+                job.get("preset", "tiktok"),
+                job.get("render_type", "final"),
+                job.get("output_path"),
+                job.get("output_sha256"),
+                job.get("error_message"),
+                int(job.get("retry_count", 0)),
+                int(job.get("priority", 10)),
+                cfg_str,
+                job.get("created_at", now),
+                job.get("started_at"),
+                job.get("completed_at"),
+            ),
+        )
+        conn.commit()
+    return job
+
+
+def get_render_job(job_id: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM render_jobs WHERE id = ?", (job_id,)).fetchone()
+        if not row:
+            return None
+        return _format_render_job_row(row)
+
+
+def list_render_jobs(status: Optional[str] = None, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM render_jobs WHERE status = ? ORDER BY priority DESC, created_at ASC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM render_jobs ORDER BY created_at DESC").fetchall()
+        return [_format_render_job_row(r) for r in rows]
+
+
+def delete_render_job(job_id: str, db_path: Optional[Path] = None) -> bool:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM render_jobs WHERE id = ?", (job_id,))
+        conn.commit()
+    return True
+
+
+def _format_render_job_row(row: sqlite3.Row) -> Dict[str, Any]:
+    cfg = {}
+    try:
+        cfg = json.loads(row["config_json"]) if row["config_json"] else {}
+    except Exception:
+        pass
+    return {
+        "id": row["id"],
+        "clip_id": row["clip_id"],
+        "source_id": row["source_id"],
+        "status": row["status"],
+        "stage": row["stage"],
+        "progress": float(row["progress"]),
+        "preset": row["preset"],
+        "render_type": row["render_type"],
+        "output_path": row["output_path"],
+        "output_sha256": row["output_sha256"],
+        "error_message": row["error_message"],
+        "retry_count": int(row["retry_count"]),
+        "priority": int(row["priority"]),
+        "config": cfg,
+        "created_at": row["created_at"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+    }
 
 def _format_job_row(row: sqlite3.Row) -> Dict[str, Any]:
     stages = []

@@ -75,8 +75,77 @@ export default function Dashboard() {
   const [recommendedOnly, setRecommendedOnly] = useState(false);
   const [sortBy, setSortBy] = useState('score_desc');
   const [actionLoading, setActionLoading] = useState({});
+  const [renderJobs, setRenderJobs] = useState([]);
+  const [selectedPresetByClip, setSelectedPresetByClip] = useState({});
 
   const pollIntervalRef = useRef(null);
+
+  const fetchRenderJobs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/renders`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setRenderJobs(data.renders || []);
+      }
+    } catch (e) {}
+  };
+
+  const handleTriggerRender = async (clipId, preset = 'tiktok', renderType = 'final') => {
+    setBanner({ type: 'info', text: `Submitting render request for ${clipId} (${preset})...` });
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/renders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clip_id: clipId, preset: preset, render_type: renderType }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBanner({ type: 'success', text: `Render job ${data.job?.id} queued in render queue.` });
+        await fetchRenderJobs();
+      } else {
+        setBanner({ type: 'error', text: `Render request rejected: ${data.detail || 'Error'}` });
+      }
+    } catch (err) {
+      setBanner({ type: 'error', text: 'Network error submitting render job.' });
+    }
+  };
+
+  const handleCancelRender = async (jobId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/renders/${jobId}/cancel`, { method: 'POST' });
+      if (res.ok) {
+        setBanner({ type: 'info', text: `Render job ${jobId} cancelled.` });
+        await fetchRenderJobs();
+      }
+    } catch (e) {}
+  };
+
+  const handleRetryRender = async (jobId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/renders/${jobId}/retry`, { method: 'POST' });
+      if (res.ok) {
+        setBanner({ type: 'info', text: `Render job ${jobId} re-queued for retry.` });
+        await fetchRenderJobs();
+      }
+    } catch (e) {}
+  };
+
+  const handleBatchRender = async () => {
+    const candidateIds = displayedClips.slice(0, 3).map((c) => c.id);
+    if (candidateIds.length === 0) return;
+    setBanner({ type: 'info', text: `Queueing batch render for ${candidateIds.length} clips...` });
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/renders/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clip_ids: candidateIds, preset: 'tiktok', render_type: 'final' }),
+      });
+      if (res.ok) {
+        setBanner({ type: 'success', text: `Batch render queued for ${candidateIds.length} clips.` });
+        await fetchRenderJobs();
+      }
+    } catch (e) {}
+  };
 
   const fetchJobsAndClips = async () => {
     try {
@@ -122,8 +191,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchJobsAndClips();
+    fetchRenderJobs();
     pollIntervalRef.current = setInterval(() => {
       fetchJobsAndClips();
+      fetchRenderJobs();
       if (selectedJobId) {
         fetchSingleJob(selectedJobId);
       }
@@ -1066,6 +1137,129 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Render Queue & Export Jobs (P4) */}
+        {renderJobs.length > 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Cpu className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-lg font-semibold text-slate-100">Render Queue & Export Jobs</h2>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleBatchRender}
+                  className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold transition shadow-md"
+                >
+                  + Batch Render Top 3
+                </button>
+                <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                  {renderJobs.length} {renderJobs.length === 1 ? 'Job' : 'Jobs'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {renderJobs.map((rj) => {
+                const isDone = rj.status === 'COMPLETED';
+                const isRunning = rj.status === 'RENDERING' || rj.status === 'PREPARING' || rj.status === 'VALIDATING';
+                const isFailed = rj.status === 'FAILED';
+
+                return (
+                  <div
+                    key={rj.id}
+                    className={`p-3.5 rounded-xl border text-xs flex flex-col justify-between transition space-y-2.5 ${
+                      isDone
+                        ? 'bg-slate-950/90 border-emerald-900/60'
+                        : isRunning
+                        ? 'bg-indigo-950/40 border-indigo-500/80 shadow-lg'
+                        : isFailed
+                        ? 'bg-rose-950/40 border-rose-800 text-rose-200'
+                        : 'bg-slate-950/40 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono font-bold text-slate-200">{rj.id}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                          isDone
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                            : isRunning
+                            ? 'bg-indigo-950 text-indigo-300 border border-indigo-700 animate-pulse'
+                            : isFailed
+                            ? 'bg-rose-950 text-rose-300 border border-rose-800'
+                            : 'bg-slate-900 text-slate-400 border border-slate-700'
+                        }`}
+                      >
+                        {rj.status} ({Math.round(rj.progress)}%)
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                        <span>
+                          Preset: <strong className="text-slate-200">{rj.preset}</strong>
+                        </span>
+                        <span>
+                          Clip: <strong className="text-slate-200">{rj.clip_id}</strong>
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-mono text-slate-300 truncate" title={rj.stage}>
+                        {rj.stage}
+                      </p>
+                    </div>
+
+                    <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          isDone
+                            ? 'bg-emerald-500'
+                            : isFailed
+                            ? 'bg-rose-500'
+                            : 'bg-gradient-to-r from-indigo-500 to-cyan-400'
+                        }`}
+                        style={{ width: `${Math.max(4, rj.progress)}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800/80 text-[11px] font-mono">
+                      {isDone && rj.output_path && (
+                        <a
+                          href={`/renders/${rj.output_path.split('\\').pop().split('/').pop()}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-emerald-400 hover:underline flex items-center space-x-1"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Open Export</span>
+                        </a>
+                      )}
+                      {isRunning && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancelRender(rj.id)}
+                          className="text-rose-400 hover:text-rose-300 font-bold"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {isFailed && (
+                        <button
+                          type="button"
+                          onClick={() => handleRetryRender(rj.id)}
+                          className="text-amber-400 hover:text-amber-300 font-bold"
+                        >
+                          Retry Render
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Review Queue & Generated Clips */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
@@ -1412,8 +1606,33 @@ export default function Dashboard() {
                       )}
                     </div>
 
+                    {/* P4 Export & Render Workflow */}
+                    <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center space-x-1.5 text-xs font-mono">
+                        <span className="text-slate-400 text-[10px]">Export:</span>
+                        <select
+                          value={selectedPresetByClip[clip.id] || 'tiktok'}
+                          onChange={(e) => setSelectedPresetByClip({ ...selectedPresetByClip, [clip.id]: e.target.value })}
+                          className="bg-slate-900 border border-slate-700 text-slate-200 rounded px-1.5 py-0.5 text-[10px] font-mono"
+                        >
+                          <option value="tiktok">TikTok 1080p</option>
+                          <option value="high_quality">HQ 8Mbps 1080p</option>
+                          <option value="draft">Draft 720p</option>
+                          <option value="preview">Fast Preview</option>
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerRender(clip.id, selectedPresetByClip[clip.id] || 'tiktok', 'final')}
+                        className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-mono font-bold transition flex items-center space-x-1 shadow-md shadow-indigo-600/20"
+                      >
+                        <Video className="w-3 h-3" />
+                        <span>Render MP4</span>
+                      </button>
+                    </div>
+
                     {/* Actions */}
-                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3">
+                    <div className="pt-2 flex items-center justify-between gap-3">
                       {isPending ? (
                         <>
                           <button
