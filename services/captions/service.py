@@ -175,13 +175,28 @@ def group_words_into_adaptive_chunks(
         )
 
         if should_split:
-            chunks.append(current_chunk)
+            # Dynamic Line Balancing: if chunk exceeds 24 characters with 4 words, balance into 2+2
+            total_chars = sum(len(x.text) for x in current_chunk) + len(current_chunk) - 1
+            if len(current_chunk) == 4 and total_chars > 24 and not has_punctuation:
+                chunks.append(current_chunk[:2])
+                chunks.append(current_chunk[2:])
+            else:
+                chunks.append(current_chunk)
             current_chunk = []
 
     if current_chunk:
         chunks.append(current_chunk)
-    return chunks
 
+    # Orphan Prevention Pass (P3.5): rebalance trailing 1-word orphan
+    if len(chunks) >= 2 and len(chunks[-1]) == 1:
+        prev_chunk = chunks[-2]
+        if len(prev_chunk) >= 3:
+            prev_last_w = prev_chunk[-1].text.strip()
+            if not (prev_last_w and prev_last_w[-1] in {".", "!", "?"}):
+                borrowed = prev_chunk.pop()
+                chunks[-1].insert(0, borrowed)
+
+    return chunks
 
 def group_words_into_chunks(
     words: List[Word],
@@ -529,10 +544,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     for idx, other_w in enumerate(chunk):
                         w_clean = escape_ass_text(other_w.text)
                         if idx == curr_idx:
-                            phrase_parts.append(f"{{\\c{highlight_color_ass}}}{w_clean}{{\\c{text_color_ass}}}")
+                            reset_tag = "{\\rDefault}" if (w_clean and w_clean[-1] in {".", "?", "!", ","}) else f"{{\\c{text_color_ass}}}"
+                            phrase_parts.append(f"{{\\c{highlight_color_ass}}}{w_clean}{reset_tag}")
                         else:
                             phrase_parts.append(w_clean)
-
                     line_text = " ".join(phrase_parts)
                     events.append(f"Dialogue: 0,{w_start_str},{w_end_str},Default,,0,0,0,,{line_text}")
             else:

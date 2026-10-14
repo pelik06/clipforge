@@ -466,10 +466,27 @@ def execute_job_pipeline_sync(
     candidates_to_render = scored_candidates[:job_cfg.max_clips]
     update_stage(7, "running", detail=f"FFmpeg extracting {len(candidates_to_render)} slices across timeline...")
     try:
+        from services.boundary_refinement import SmartBoundaryRefiner
+        refiner = SmartBoundaryRefiner(max_start_expansion=2.0, max_end_expansion=3.0)
+        all_words = []
+        for seg in transcript_segments:
+            if seg.words:
+                all_words.extend(seg.words)
+
         cr = ClipRenderer()
         successful_candidates = []
         for idx, cand in enumerate(candidates_to_render, 1):
             raw_slice = work_dir / f"{job_id}_cand_{idx}_clipped.mp4"
+            b_res = refiner.refine(
+                candidate_start=cand.start,
+                candidate_end=cand.end,
+                words=all_words,
+                min_duration=job_cfg.min_clip_duration,
+                max_duration=job_cfg.max_clip_duration,
+            )
+            cand.start = b_res.refined_start
+            cand.end = b_res.refined_end
+            setattr(cand, "boundary_adjustment", b_res.to_dict())
             try:
                 if kind == "youtube":
                     actual_slice = download_youtube_segment(
@@ -610,14 +627,20 @@ def execute_job_pipeline_sync(
     t12 = time.time()
     update_stage(12, "running", detail=f"Registering {len(final_files)} clips into review queue for operator approval...")
     try:
-        from services.clip_quality import ClipQualityAnalyzer
+        from services.clip_quality import ClipQualityAnalyzer, HookPayoffClassifier
+        from services.clustering import TopicClusterer
+        from services.context import ContextCompletenessAnalyzer
         from services.recommendation import RecommendationEngine
+        from services.visual_quality import VisualCompositionAnalyzer
 
         analyzer = ClipQualityAnalyzer()
         rec_engine = RecommendationEngine(default_top_k=job_cfg.max_clips or 5)
+        hook_classifier = HookPayoffClassifier()
+        context_analyzer = ContextCompletenessAnalyzer()
+        visual_analyzer = VisualCompositionAnalyzer()
+        topic_clusterer = TopicClusterer()
         raw_clip_objs = []
         quality_map = {}
-
         for idx, (f_path, cand, qc_chk) in enumerate(zip(final_files, scored_candidates, qc_results), 1):
             rf_analysis = reframe_analyses[idx - 1] if idx <= len(reframe_analyses) else None
             c_id = f"clip_{uuid.uuid4().hex[:6]}"
@@ -673,15 +696,51 @@ def execute_job_pipeline_sync(
                 "text": clip_text,
                 "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
+
+            # P3 Intelligence Analyses
+            h_info = hook_classifier.classify_hook(clip_text)
+            p_info = hook_classifier.classify_payoff(clip_text)
+            ctx_info = context_analyzer.evaluate(clip_sents, full_text=clip_text)
+            vis_faces = [(d.center_x, d.center_y, d.width, d.height) for d in rf_analysis.detections] if (rf_analysis and hasattr(rf_analysis, "detections") and rf_analysis.detections) else None
+            vis_info = visual_analyzer.evaluate(faces=vis_faces, layout_mode=clip_obj["layout_mode"])
+
+            clip_obj["hook_type"] = h_info.category.value
+            clip_obj["payoff_type"] = p_info.category.value
+            clip_obj["context_score"] = ctx_info.context_score
+            clip_obj["bridge_score"] = round(ctx_info.bridge_count * 10.0, 1)
+            clip_obj["context_completeness"] = ctx_info.context_completeness
+            clip_obj["visual_quality_score"] = vis_info.visual_quality_score
+            clip_obj["headroom_score"] = vis_info.headroom_score
+            clip_obj["face_size_score"] = vis_info.face_size_score
+            clip_obj["boundary_adjustment"] = getattr(cand, "boundary_adjustment", {})
+
+            # P3 Quality Flags
+            flags = []
+            if q_feat.breakdown.hook >= 10.0 or h_info.category.value in {"QUESTION", "CURIOSITY_GAP", "NUMBER"}:
+                flags.append("STRONG HOOK")
+            if ctx_info.context_completeness >= 0.70:
+                flags.append("COMPLETE THOUGHT")
+            if q_feat.breakdown.information >= 6.5:
+                flags.append("HIGH INFORMATION")
+            if p_info.category.value in {"LESSON", "CONCLUSION", "RECOMMENDATION", "RESULT"}:
+                flags.append("STRONG PAYOFF")
+            if vis_info.visual_quality_score >= 80.0:
+                flags.append("GREAT FRAMING")
+            if not vis_info.caption_collision:
+                flags.append("CAPTION SAFE")
+            clip_obj["quality_flags"] = flags
+
             raw_clip_objs.append(clip_obj)
 
+        # Topic family clustering & diversity
+        topic_clusterer.cluster_clips(raw_clip_objs)
         recommended_clips = rec_engine.recommend_clips(raw_clip_objs, quality_map=quality_map)
-        for clip_obj in recommended_clips:
+        diversified_clips = topic_clusterer.enforce_family_diversity(recommended_clips)
+
+        for clip_obj in diversified_clips:
             save_clip(clip_obj)
             rendered_clips.append(clip_obj)
         update_stage(12, "completed", detail=f"All {len(rendered_clips)} clips registered in review queue. Awaiting human operator approval.", elapsed=round(time.time() - t12, 2))
-
-        # Job complete and awaiting review
         job["status"] = "waiting_approval"
         job["progress"] = 100
         job["stage"] = f"{len(rendered_clips)} clips rendered in 9:16 vertical MP4 — awaiting human approval"

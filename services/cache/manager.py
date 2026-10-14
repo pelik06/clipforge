@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-ANALYSIS_VERSION = "p2.1"
+ANALYSIS_VERSION = "p3.1"
 
 
 class FeatureCacheManager:

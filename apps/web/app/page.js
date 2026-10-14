@@ -1290,6 +1290,28 @@ export default function Dashboard() {
                               {clip.audio_reaction}
                             </span>
                           )}
+
+                          {/* P3 Metadata Badges */}
+                          {clip.topic_label && (
+                            <span className="bg-indigo-950/80 text-indigo-300 border border-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                              Topic: {clip.topic_label}
+                            </span>
+                          )}
+                          {clip.hook_type && clip.hook_type !== 'GENERAL' && (
+                            <span className="bg-cyan-950/80 text-cyan-300 border border-cyan-700 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                              Hook: {clip.hook_type}
+                            </span>
+                          )}
+                          {clip.payoff_type && clip.payoff_type !== 'GENERAL' && (
+                            <span className="bg-emerald-950/80 text-emerald-300 border border-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                              Payoff: {clip.payoff_type}
+                            </span>
+                          )}
+                          {typeof clip.context_completeness === 'number' && (
+                            <span className="bg-slate-900 text-slate-300 border border-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono">
+                              Context: {Math.round(clip.context_completeness * 100)}%
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center space-x-2 font-mono text-slate-400 text-xs">
@@ -1307,6 +1329,16 @@ export default function Dashboard() {
                         <p className="text-xs text-slate-400 mt-1 truncate" title={clip.vod}>
                           Source: <span className="font-mono text-slate-300">{clip.vod}</span>
                         </p>
+                        {/* P3 Quality Flags */}
+                        {clip.quality_flags && clip.quality_flags.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1.5 text-[9px] font-mono">
+                            {clip.quality_flags.map((flg, flg_i) => (
+                              <span key={flg_i} className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 font-semibold tracking-wide">
+                                ★ {flg}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Technical Timestamps & QC details */}
