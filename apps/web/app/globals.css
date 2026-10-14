@@ -2,8 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --studio-bg: #0c0d11;
+  --studio-surface: #14161c;
+  --studio-surface-hover: #1a1d24;
+  --studio-surface-active: #20242e;
+  --studio-border: #222631;
+  --studio-border-hover: #323849;
+  --studio-accent: #2563eb;
+  --studio-accent-hover: #1d4ed8;
+  --studio-fg: #f3f4f6;
+  --studio-muted: #94a3b8;
+}
+
 body {
-  background-color: #030712;
-  color: #f3f4f6;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--studio-bg);
+  color: var(--studio-fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Tabular numbers for timecodes, durations and scores */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom workstation scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0c0d11;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #222631;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #323849;
+}
+
+/* Studio panel surface */
+.studio-panel {
+  background: #14161c;
+  border: 1px solid #222631;
+}
+
+.studio-panel-hover {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.studio-panel-hover:hover {
+  border-color: #323849;
+  background-color: #181b22;
 }
