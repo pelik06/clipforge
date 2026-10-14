@@ -92,6 +92,21 @@ def init_db(db_path: Optional[Path] = None) -> None:
         for col_name, col_def in column_defs.items():
             if col_name not in existing_cols:
                 conn.execute(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_def}")
+
+        cursor.execute("PRAGMA table_info(clips)")
+        existing_clip_cols = {r["name"] for r in cursor.fetchall()}
+        clip_column_defs = {
+            "speaker_track_id": "TEXT DEFAULT NULL",
+            "speaker_confidence": "REAL DEFAULT 0.0",
+            "layout_mode": "TEXT DEFAULT 'TRACK'",
+            "audio_reaction": "TEXT DEFAULT NULL",
+            "audio_reaction_confidence": "REAL DEFAULT 0.0",
+            "variant": "TEXT DEFAULT 'normal'",
+            "parent_moment_id": "TEXT DEFAULT NULL",
+        }
+        for col_name, col_def in clip_column_defs.items():
+            if col_name not in existing_clip_cols:
+                conn.execute(f"ALTER TABLE clips ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
 
@@ -195,15 +210,24 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
             INSERT INTO clips (
                 id, job_id, title, duration, score, status, vod,
                 is_fixture, is_real_media, media_type, render_status, render_notice,
-                media_url, start_time, end_time, resolution, qc_json, created_at, reviewed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                media_url, start_time, end_time, resolution, qc_json, created_at, reviewed_at,
+                speaker_track_id, speaker_confidence, layout_mode, audio_reaction, audio_reaction_confidence,
+                variant, parent_moment_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 reviewed_at = excluded.reviewed_at,
                 render_status = excluded.render_status,
                 render_notice = excluded.render_notice,
                 media_url = excluded.media_url,
-                qc_json = excluded.qc_json;
+                qc_json = excluded.qc_json,
+                speaker_track_id = COALESCE(excluded.speaker_track_id, clips.speaker_track_id),
+                speaker_confidence = COALESCE(excluded.speaker_confidence, clips.speaker_confidence),
+                layout_mode = COALESCE(excluded.layout_mode, clips.layout_mode),
+                audio_reaction = COALESCE(excluded.audio_reaction, clips.audio_reaction),
+                audio_reaction_confidence = COALESCE(excluded.audio_reaction_confidence, clips.audio_reaction_confidence),
+                variant = COALESCE(excluded.variant, clips.variant),
+                parent_moment_id = COALESCE(excluded.parent_moment_id, clips.parent_moment_id);
             """,
             (
                 clip["id"],
@@ -225,6 +249,13 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 qc_str,
                 clip.get("created_at", now),
                 clip.get("reviewed_at"),
+                clip.get("speaker_track_id"),
+                float(clip.get("speaker_confidence") or 0.0),
+                clip.get("layout_mode", "TRACK"),
+                clip.get("audio_reaction"),
+                float(clip.get("audio_reaction_confidence") or 0.0),
+                clip.get("variant", "normal"),
+                clip.get("parent_moment_id"),
             ),
         )
         conn.commit()
@@ -327,4 +358,11 @@ def _format_clip_row(row: sqlite3.Row) -> Dict[str, Any]:
         "qc_checks": qc_checks,
         "created_at": row["created_at"],
         "reviewed_at": row["reviewed_at"],
+        "speaker_track_id": row["speaker_track_id"] if "speaker_track_id" in row.keys() else None,
+        "speaker_confidence": float(row["speaker_confidence"] or 0.0) if "speaker_confidence" in row.keys() else 0.0,
+        "layout_mode": row["layout_mode"] if "layout_mode" in row.keys() and row["layout_mode"] else "TRACK",
+        "audio_reaction": row["audio_reaction"] if "audio_reaction" in row.keys() else None,
+        "audio_reaction_confidence": float(row["audio_reaction_confidence"] or 0.0) if "audio_reaction_confidence" in row.keys() else 0.0,
+        "variant": row["variant"] if "variant" in row.keys() and row["variant"] else "normal",
+        "parent_moment_id": row["parent_moment_id"] if "parent_moment_id" in row.keys() else None,
     }

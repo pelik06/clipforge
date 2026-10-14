@@ -24,6 +24,7 @@ export default function ClipsView({
 }) {
   const [sourceTab, setSourceTab] = useState('real'); // 'real' or 'fixtures'
   const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'pending', 'approved', 'rejected'
+  const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'tight', 'extended', 'split', 'reaction'
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('score_desc');
   const [selectedClip, setSelectedClip] = useState(null);
@@ -47,6 +48,11 @@ export default function ClipsView({
     if (statusFilter === 'pending' && !isPending) return false;
     if (statusFilter === 'approved' && !isApproved) return false;
     if (statusFilter === 'rejected' && !isRejected) return false;
+
+    if (typeFilter === 'tight' && clip.variant !== 'tight') return false;
+    if (typeFilter === 'extended' && clip.variant !== 'extended') return false;
+    if (typeFilter === 'split' && clip.layout_mode !== 'SPLIT') return false;
+    if (typeFilter === 'reaction' && !clip.audio_reaction) return false;
 
     return true;
   });
@@ -136,6 +142,27 @@ export default function ClipsView({
             >
               <span>{tab.label}</span>{' '}
               <span className="text-[10px] text-slate-500">({tab.count})</span>
+            </button>
+          ))}
+
+          <div className="h-4 w-px bg-[#2b3140] mx-1 hidden sm:block" />
+
+          {[
+            { id: 'tight', label: 'Tight' },
+            { id: 'extended', label: 'Extended' },
+            { id: 'split', label: 'Split' },
+            { id: 'reaction', label: 'Reaction' },
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setTypeFilter(typeFilter === cat.id ? 'all' : cat.id)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+                typeFilter === cat.id
+                  ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700'
+                  : 'text-slate-400 hover:text-slate-200 border border-transparent'
+              }`}
+            >
+              {cat.label}
             </button>
           ))}
         </div>
@@ -242,8 +269,30 @@ export default function ClipsView({
                     <p className="text-[11px] text-slate-400 mt-0.5 truncate">
                       {clip.vod || 'Source VOD'}
                     </p>
+                    {/* P1 Metadata Badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1.5 text-[10px] font-mono">
+                      <span className="px-1.5 py-0.5 rounded bg-[#1e2330] text-indigo-300 border border-[#2b3346]">
+                        {clip.speaker_track_id || 'face_01'}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded border ${
+                        clip.layout_mode === 'SPLIT'
+                          ? 'bg-amber-950/80 text-amber-300 border-amber-800'
+                          : 'bg-[#1a2333] text-cyan-300 border-[#253754]'
+                      }`}>
+                        {clip.layout_mode || 'TRACK'}
+                      </span>
+                      {clip.variant && clip.variant !== 'normal' && (
+                        <span className="px-1.5 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800">
+                          {clip.variant === 'tight' ? 'Tight' : 'Extended'}
+                        </span>
+                      )}
+                      {clip.audio_reaction && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800">
+                          {clip.audio_reaction}
+                        </span>
+                      )}
+                    </div>
                   </div>
-
                   {/* QC & Inspect Bar */}
                   <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-2 border-t border-[#1d212b]">
                     <span className="text-emerald-400 flex items-center gap-1">

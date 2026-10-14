@@ -228,6 +228,7 @@ def execute_job_pipeline_sync(
     qc_result: Optional[Dict[str, Any]] = None
     transcript_segments: List[TranscriptSegment] = []
     scored_candidates: List[Any] = []
+    reframe_analyses: List[Any] = []
 
     # --- STAGE 0: Source validation ---
     t0 = time.time()
@@ -508,7 +509,7 @@ def execute_job_pipeline_sync(
                 if s.get("end", 0) > cand.start and s.get("start", 0) < cand.end
             ]
             reframe_out = work_dir / f"{job_id}_cand_{idx}_reframe.mp4"
-            rf.render_vertical(
+            rf_res = rf.render_vertical(
                 str(slice_path),
                 str(reframe_out),
                 width=1080,
@@ -517,6 +518,7 @@ def execute_job_pipeline_sync(
                 scenes=clip_scenes,
             )
             reframe_files.append(reframe_out)
+            reframe_analyses.append(getattr(rf_res, "analysis", None))
         update_stage(8, "completed", detail=f"Rendered {len(reframe_files)} 9:16 vertical MP4 compositions ({job_cfg.framing_mode}).", elapsed=round(time.time() - t8, 2))
     except Exception as exc:
         update_stage(8, "failed", error=f"Vertical reframing error: {str(exc)}")
@@ -609,6 +611,7 @@ def execute_job_pipeline_sync(
     update_stage(12, "running", detail=f"Registering {len(final_files)} clips into review queue for operator approval...")
     try:
         for idx, (f_path, cand, qc_chk) in enumerate(zip(final_files, scored_candidates, qc_results), 1):
+            rf_analysis = reframe_analyses[idx - 1] if idx <= len(reframe_analyses) else None
             c_id = f"clip_{uuid.uuid4().hex[:6]}"
             clip_obj = {
                 "id": c_id,
@@ -633,6 +636,13 @@ def execute_job_pipeline_sync(
                 "caption_language": job_cfg.caption_language,
                 "caption_size": job_cfg.caption_size,
                 "caption_position": job_cfg.caption_position,
+                "speaker_track_id": f"face_{rf_analysis.primary_track_id:02d}" if (rf_analysis and hasattr(rf_analysis, "primary_track_id") and rf_analysis.primary_track_id) else "face_01",
+                "speaker_confidence": 0.88 if (rf_analysis and getattr(rf_analysis, "active_speaker_available", False)) else 0.5,
+                "layout_mode": getattr(rf_analysis, "layout_mode", "TRACK") if rf_analysis else "TRACK",
+                "audio_reaction": getattr(cand, "audio_reaction", None) or ("High Energy" if any("reaction" in r.lower() for r in cand.reasons) else "Speech"),
+                "audio_reaction_confidence": 0.85 if any("reaction" in r.lower() for r in cand.reasons) else 0.0,
+                "variant": getattr(cand, "variant", "normal"),
+                "parent_moment_id": getattr(cand, "parent_moment_id", None),
                 "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
             save_clip(clip_obj)

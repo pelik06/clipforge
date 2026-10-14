@@ -220,6 +220,7 @@ class ThoughtDetector:
         scenes: Optional[List[Dict[str, float]]] = None,
         silences: Optional[List[Tuple[float, float]]] = None,
         total_duration: float = 300.0,
+        audio_reactions: Optional[List[Any]] = None,
     ) -> float:
         """Compute holistic full-window quality score evaluating all 9 criteria plus penalties."""
         scenes = scenes or []
@@ -293,9 +294,18 @@ class ThoughtDetector:
             + 0.05 * boundary_quality
             + 0.05 * scene_quality
         )
-
         score_100 = base_score * 100.0
 
+        # Audio Reaction Boost (up to 10% maximum contribution)
+        if audio_reactions:
+            for r in audio_reactions:
+                r_start = getattr(r, "start", 0.0) if hasattr(r, "start") else r.get("start", 0.0)
+                r_end = getattr(r, "end", 0.0) if hasattr(r, "end") else r.get("end", 0.0)
+                r_conf = getattr(r, "confidence", 0.7) if hasattr(r, "confidence") else r.get("confidence", 0.7)
+                if max(t0, r_start) < min(t1, r_end):
+                    boost = min(10.0, r_conf * 10.0)
+                    score_100 += boost
+                    break
         # PENALTIES
         # Incomplete start penalty: e.g. starts with "and", "so", "because", "dan" without setup
         if DANGLING_START_REGEX.search(thought.text):
@@ -343,5 +353,93 @@ class ThoughtDetector:
                 unique.append(cand)
                 if len(unique) >= max_clips:
                     break
-
         return unique
+
+    def generate_variants_for_top_moments(
+        self,
+        top_moments: List[CandidateMoment],
+        sentences: List[SentenceWindow],
+        top_n: int = 3,
+    ) -> List[CandidateMoment]:
+        """Generate tight (20-35s) and extended (40-65s) variants for top N moments based on sentence boundaries."""
+        if not sentences or not top_moments:
+            return top_moments
+
+        expanded_moments: List[CandidateMoment] = []
+
+        for idx, mom in enumerate(top_moments):
+            if idx >= top_n:
+                expanded_moments.append(mom)
+                continue
+
+            moment_sentences = [
+                s for s in sentences if s.start >= (mom.start - 0.5) and s.end <= (mom.end + 0.5)
+            ]
+
+            if len(moment_sentences) < 2:
+                expanded_moments.append(mom)
+                continue
+
+            # 1. Tight Variant: Hook + core punchline (20-35s)
+            tight_moment = None
+            for p in range(len(moment_sentences)):
+                sub_end = moment_sentences[p].end
+                sub_dur = sub_end - moment_sentences[0].start
+                if 20.0 <= sub_dur <= 35.0:
+                    if re.search(r"[.!?]$", moment_sentences[p].text.strip()):
+                        tight_moment = CandidateMoment(
+                            start=round(moment_sentences[0].start, 2),
+                            end=round(sub_end, 2),
+                            score=round(mom.score + 0.5, 1),
+                            reasons=mom.reasons + [f"Tight punchy variant ({sub_dur:.1f}s)"],
+                            signals=dict(mom.signals),
+                            variant="tight",
+                            parent_moment_id=mom.moment_id,
+                        )
+                        break
+
+            # 2. Extended Variant: Context setup + payoff resolution (40-65s)
+            ext_moment = None
+            first_idx = sentences.index(moment_sentences[0]) if moment_sentences[0] in sentences else -1
+            last_idx = sentences.index(moment_sentences[-1]) if moment_sentences[-1] in sentences else -1
+
+            if first_idx >= 0 and last_idx >= 0:
+                e_start_idx = first_idx
+                e_end_idx = last_idx
+
+                if first_idx > 0:
+                    prev_s = sentences[first_idx - 1]
+                    if (moment_sentences[0].start - prev_s.end) < 2.5 and not BUMPER_TEXT_REGEX.search(prev_s.text):
+                        e_start_idx = first_idx - 1
+
+                while e_end_idx < (len(sentences) - 1):
+                    nxt_s = sentences[e_end_idx + 1]
+                    total_dur = nxt_s.end - sentences[e_start_idx].start
+                    if total_dur > 65.0 or (nxt_s.start - sentences[e_end_idx].end) > 3.0:
+                        break
+                    e_end_idx += 1
+                    if total_dur >= 40.0 and re.search(r"[.!?]$", nxt_s.text.strip()):
+                        break
+
+                ext_dur = sentences[e_end_idx].end - sentences[e_start_idx].start
+                if ext_dur > mom.duration + 4.0 and ext_dur <= 70.0:
+                    ext_moment = CandidateMoment(
+                        start=round(sentences[e_start_idx].start, 2),
+                        end=round(sentences[e_end_idx].end, 2),
+                        score=round(mom.score, 1),
+                        reasons=mom.reasons + [f"Extended context variant ({ext_dur:.1f}s)"],
+                        signals=dict(mom.signals),
+                        variant="extended",
+                        parent_moment_id=mom.moment_id,
+                    )
+
+            if tight_moment and ext_moment:
+                expanded_moments.extend([tight_moment, ext_moment])
+            elif tight_moment:
+                expanded_moments.extend([tight_moment, mom])
+            elif ext_moment:
+                expanded_moments.extend([mom, ext_moment])
+            else:
+                expanded_moments.append(mom)
+
+        return expanded_moments

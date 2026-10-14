@@ -38,14 +38,17 @@ class TrajectoryPoint:
 @dataclass
 class ReframingAnalysis:
     mode: str
-    active_speaker_available: bool = False  # Transparent disclosure
+    layout_mode: str = "TRACK"  # "TRACK", "SPLIT", "GENERAL"
+    active_speaker_available: bool = False
     face_detection_available: bool = False
     fallback_applied: bool = False
     fallback_reason: Optional[str] = None
     detections: List[Detection] = field(default_factory=list)
     trajectory: List[TrajectoryPoint] = field(default_factory=list)
     primary_track_id: Optional[int] = None
-
+    secondary_track_id: Optional[int] = None
+    speaker_timeline: Optional[Any] = None
+    split_crops: Optional[Tuple[Tuple[int, int, int, int], Tuple[int, int, int, int]]] = None
 
 class ReframingResult(str):
     analysis: ReframingAnalysis
@@ -112,6 +115,7 @@ class Reframer:
         out_height: int = 1920,
         scenes: Optional[List[Dict[str, float]]] = None,
         framing_mode: str = "track",
+        speech_segments: Optional[Any] = None,
     ) -> ReframingAnalysis:
         """Sample video frames, track faces with persistent IDs, and compute smoothed trajectory with scene snaps."""
         cap = cv2.VideoCapture(video_path)
@@ -292,9 +296,91 @@ class Reframer:
                 fallback_reason="No faces detected in video; center crop fallback applied.",
             )
 
-        # Select primary track: highest persistence and area (salient speaker)
-        primary_tid = max(tracks.keys(), key=lambda tid: (tracks[tid]["count"], tracks[tid]["total_area"]))
-        primary_dets = {d.timestamp: d for d in raw_detections if d.track_id == primary_tid}
+        # Determine layout mode
+        req_mode = str(framing_mode).lower()
+        is_split_requested = (req_mode == "split")
+
+        # Evaluate Active Speaker Detection
+        speaker_timeline = None
+        active_spk_available = False
+        spk_fallback_reason = "Active speaker detection unavailable; using face/person tracking fallback."
+
+        try:
+            from services.speaker_detection.detector import ActiveSpeakerDetector
+            spk_detector = ActiveSpeakerDetector()
+            speaker_timeline = spk_detector.analyze_speakers(
+                detections=raw_detections,
+                speech_segments=speech_segments or [],
+                scenes=scenes,
+                video_path=video_path,
+                total_duration=duration,
+            )
+            if speaker_timeline and speaker_timeline.speaker_mode == "active_speaker" and speaker_timeline.segments:
+                active_spk_available = True
+                spk_fallback_reason = None
+        except Exception as e:
+            speaker_timeline = None
+            active_spk_available = False
+
+        # Multi-Speaker Split Layout Decision
+        sorted_tracks = sorted(tracks.keys(), key=lambda tid: (tracks[tid]["count"], tracks[tid]["total_area"]), reverse=True)
+        primary_tid = sorted_tracks[0]
+        secondary_tid = sorted_tracks[1] if len(sorted_tracks) > 1 else None
+
+        # Check split eligibility: at least 2 tracks with significant horizontal distance
+        if is_split_requested and secondary_tid is not None:
+            p1_cx = tracks[primary_tid]["last_cx"]
+            p2_cx = tracks[secondary_tid]["last_cx"]
+            p1_cy = tracks[primary_tid]["last_cy"]
+            p2_cy = tracks[secondary_tid]["last_cy"]
+            dist_x = abs(p1_cx - p2_cx) / float(source_w)
+
+            # Split ratio for top & bottom: 1080x960 (9:8 aspect ratio)
+            w_c = min(source_w, int(source_h * (out_width / (out_height / 2.0))))
+            h_c = int(w_c * ((out_height / 2.0) / out_width))
+            if h_c > source_h:
+                h_c = source_h
+                w_c = int(h_c * (out_width / (out_height / 2.0)))
+
+            # Calculate top crop for speaker 1, bottom crop for speaker 2
+            # Place left speaker on top or bottom according to position
+            t1_x = max(0, min(source_w - w_c, int(p1_cx - w_c / 2.0)))
+            t1_y = max(0, min(source_h - h_c, int(p1_cy - h_c / 2.0)))
+            t2_x = max(0, min(source_w - w_c, int(p2_cx - w_c / 2.0)))
+            t2_y = max(0, min(source_h - h_c, int(p2_cy - h_c / 2.0)))
+
+            split_crops = ((t1_x, t1_y, w_c, h_c), (t2_x, t2_y, w_c, h_c))
+            return ReframingAnalysis(
+                mode="split_layout",
+                layout_mode="SPLIT",
+                active_speaker_available=active_spk_available,
+                face_detection_available=True,
+                fallback_applied=False,
+                fallback_reason=None,
+                detections=raw_detections,
+                trajectory=[],
+                primary_track_id=primary_tid,
+                secondary_track_id=secondary_tid,
+                speaker_timeline=speaker_timeline,
+                split_crops=split_crops,
+            )
+
+        # Standard TRACK / Follow Speaker Mode
+        # Pre-index active speaker by timestamp if timeline exists
+        spk_by_timestamp: Dict[float, int] = {}
+        if active_spk_available and speaker_timeline:
+            for ts in [d.timestamp for d in raw_detections]:
+                for seg in speaker_timeline.segments:
+                    if seg.start <= ts <= seg.end:
+                        spk_by_timestamp[ts] = seg.track_id
+                        break
+
+        # Group detections by track
+        dets_by_track: Dict[int, Dict[float, Any]] = {}
+        for d in raw_detections:
+            if d.track_id not in dets_by_track:
+                dets_by_track[d.track_id] = {}
+            dets_by_track[d.track_id][d.timestamp] = d
 
         # Calculate crop coordinates in 1080x1920 vertical space
         scale_factor = out_height / float(source_h)
@@ -313,12 +399,20 @@ class Reframer:
 
         for ts in sampled_timestamps:
             is_cut = any(abs(ts - cut_t) < 0.30 for cut_t in scene_cuts)
-            if ts in primary_dets:
-                d = primary_dets[ts]
+            # Active speaker priority: lookup speaker track at this timestamp
+            target_tid = spk_by_timestamp.get(ts, primary_tid)
+            track_dets = dets_by_track.get(target_tid, {})
+
+            if ts in track_dets:
+                d = track_dets[ts]
+                last_known_cx = d.center_x
+                last_known_cy = d.center_y
+            elif ts in dets_by_track.get(primary_tid, {}):
+                d = dets_by_track[primary_tid][ts]
                 last_known_cx = d.center_x
                 last_known_cy = d.center_y
             elif is_cut:
-                # On scene cut without primary face, search any detected face at this timestamp
+                # On scene cut without target face, search any detected face at this timestamp
                 cur_faces = [d for d in raw_detections if d.timestamp == ts]
                 if cur_faces:
                     best_f = max(cur_faces, key=lambda f: f.width * f.height)
@@ -341,11 +435,9 @@ class Reframer:
 
         for i, (ts, tcx, tcy, cx, cy, is_cut) in enumerate(raw_points):
             if is_cut and self.settings.scene_cut_snap:
-                # INSTANT SNAP at scene cut: reset smoothing and jump immediately
                 smoothed_x = cx
                 jump_confirm_count = 0
             else:
-                # Within scene: smooth tracking with deadband
                 target_shift = smoothed_x if abs(cx - smoothed_x) < 25.0 else cx
                 if abs(target_shift - smoothed_x) > 180.0:
                     jump_confirm_count += 1
@@ -353,7 +445,6 @@ class Reframer:
                         target_shift = smoothed_x
                 else:
                     jump_confirm_count = 0
-
                 smoothed_x = alpha * target_shift + (1.0 - alpha) * smoothed_x
 
             final_crop_x = max(0.0, min(max_crop_x, smoothed_x))
@@ -370,13 +461,16 @@ class Reframer:
 
         return ReframingAnalysis(
             mode="speaker_aware_tracking",
-            active_speaker_available=False,
+            layout_mode="TRACK",
+            active_speaker_available=active_spk_available,
             face_detection_available=True,
-            fallback_applied=False,
-            fallback_reason="Active speaker detection unavailable; using face/person tracking fallback.",
+            fallback_applied=not active_spk_available,
+            fallback_reason=spk_fallback_reason,
             detections=raw_detections,
             trajectory=smoothed_trajectory,
             primary_track_id=primary_tid,
+            secondary_track_id=secondary_tid,
+            speaker_timeline=speaker_timeline,
         )
 
     def build_crop_filter(
@@ -424,6 +518,39 @@ class Reframer:
 
         scale_str = f"scale=w='max({out_w},trunc(iw*{out_h}/ih/2)*2)':h={out_h}"
         return f"{scale_str},crop={out_w}:{out_h}:x='{expr}':y=0"
+    def build_split_filter(
+        self,
+        analysis: ReframingAnalysis,
+        src_w: int,
+        src_h: int,
+        out_w: int = 1080,
+        out_h: int = 1920,
+    ) -> str:
+        """Build FFmpeg filter_complex for dual stacked 1080x960 split layout."""
+        half_h = out_h // 2
+        w_c = min(src_w, int(src_h * (out_w / float(half_h))))
+        h_c = int(w_c * (float(half_h) / out_w))
+        if h_c > src_h:
+            h_c = src_h
+            w_c = int(h_c * (out_w / float(half_h)))
+
+        c1 = (0, 0, w_c, h_c)
+        c2 = (max(0, src_w - w_c), 0, w_c, h_c)
+        if analysis.split_crops:
+            c1, c2 = analysis.split_crops
+
+        x1, y1, w1, h1 = c1
+        x2, y2, w2, h2 = c2
+        w1, h1 = (w1 // 2) * 2, (h1 // 2) * 2
+        w2, h2 = (w2 // 2) * 2, (h2 // 2) * 2
+        x1, y1 = (x1 // 2) * 2, (y1 // 2) * 2
+        x2, y2 = (x2 // 2) * 2, (y2 // 2) * 2
+
+        top_filt = f"[0:v]crop={w1}:{h1}:{x1}:{y1},scale={out_w}:{half_h}[top]"
+        bot_filt = f"[0:v]crop={w2}:{h2}:{x2}:{y2},scale={out_w}:{half_h}[bot]"
+        stack = "[top][bot]vstack=inputs=2[v]"
+        return f"{top_filt};{bot_filt};{stack}"
+
 
     def render_vertical(
         self,
@@ -433,8 +560,8 @@ class Reframer:
         height: int = 1920,
         framing_mode: str = "track",
         scenes: Optional[List[Dict[str, float]]] = None,
+        speech_segments: Optional[Any] = None,
     ) -> Dict[str, Any]:
-        """Render source footage into vertical 9:16 short format applying requested framing mode."""
         source = Path(source_path)
         if not source.exists():
             raise FileNotFoundError(f"Source video file not found: {source_path}")
@@ -469,21 +596,37 @@ class Reframer:
             out_height=height,
             scenes=scenes,
             framing_mode=framing_mode,
+            speech_segments=speech_segments,
         )
-        filter_str = self.build_crop_filter(analysis, src_w, src_h, out_w=width, out_h=height)
-
-        cmd = [
-            s.ffmpeg_bin,
-            "-y",
-            "-i", str(source),
-            "-vf", filter_str,
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "22",
-            "-c:a", "copy",
-            "-movflags", "+faststart",
-            str(out),
-        ]
+        if analysis.layout_mode == "SPLIT":
+            filter_str = self.build_split_filter(analysis, src_w, src_h, out_w=width, out_h=height)
+            cmd = [
+                s.ffmpeg_bin,
+                "-y",
+                "-i", str(source),
+                "-filter_complex", filter_str,
+                "-map", "[v]",
+                "-map", "0:a?",
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "22",
+                "-movflags", "+faststart",
+                str(out),
+            ]
+        else:
+            filter_str = self.build_crop_filter(analysis, src_w, src_h, out_w=width, out_h=height)
+            cmd = [
+                s.ffmpeg_bin,
+                "-y",
+                "-i", str(source),
+                "-vf", filter_str,
+                "-c:v", "libx264",
+                "-preset", "veryfast",
+                "-crf", "22",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
+                str(out),
+            ]
 
         proc = subprocess.run(
             cmd,

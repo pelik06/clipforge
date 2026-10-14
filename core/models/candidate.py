@@ -16,7 +16,8 @@ class CandidateMoment:
     source_end: float = 0.0
     output_path: Optional[str] = None
     status: str = "detected"
-
+    variant: str = "normal"
+    parent_moment_id: Optional[str] = None
     def __post_init__(self):
         if not self.source_start:
             self.source_start = self.start
@@ -41,4 +42,6 @@ class CandidateMoment:
             "signals": self.signals,
             "output_path": self.output_path,
             "status": self.status,
+            "variant": self.variant,
+            "parent_moment_id": self.parent_moment_id,
         }
