@@ -529,6 +529,12 @@ def execute_job_pipeline_sync(
                 for s in scenes
                 if s.get("end", 0) > cand.start and s.get("start", 0) < cand.end
             ]
+            if not clip_scenes and job_cfg.enable_scene_detection:
+                try:
+                    from services.detection.scene import SceneDetector
+                    clip_scenes = SceneDetector().detect_scenes(str(slice_path))
+                except Exception:
+                    clip_scenes = []
             reframe_out = work_dir / f"{job_id}_cand_{idx}_reframe.mp4"
             rf_res = rf.render_vertical(
                 str(slice_path),
