@@ -90,6 +90,34 @@ def init_db(db_path: Optional[Path] = None) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_render_jobs_status ON render_jobs(status);
             CREATE INDEX IF NOT EXISTS idx_render_jobs_created ON render_jobs(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS editor_states (
+                clip_id TEXT PRIMARY KEY,
+                editor_version INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'DRAFT',
+                state_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_editor_states_updated ON editor_states(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS exports (
+                id TEXT PRIMARY KEY,
+                clip_id TEXT NOT NULL,
+                editor_version INTEGER NOT NULL,
+                render_job_id TEXT,
+                preset TEXT NOT NULL,
+                render_type TEXT NOT NULL,
+                output_path TEXT NOT NULL,
+                output_sha256 TEXT,
+                file_size INTEGER DEFAULT 0,
+                duration REAL DEFAULT 0.0,
+                resolution TEXT DEFAULT '1080x1920',
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'EXPORTED'
+            );
+            CREATE INDEX IF NOT EXISTS idx_exports_clip ON exports(clip_id);
+            CREATE INDEX IF NOT EXISTS idx_exports_created ON exports(created_at DESC);
             """
         )
         cursor = conn.cursor()
@@ -462,6 +490,143 @@ def _format_render_job_row(row: sqlite3.Row) -> Dict[str, Any]:
         "completed_at": row["completed_at"],
     }
 
+
+def save_editor_state(record: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    init_db(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    state_json = json.dumps(record["state_json"]) if isinstance(record["state_json"], dict) else str(record["state_json"])
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO editor_states (
+                clip_id, editor_version, status, state_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(clip_id) DO UPDATE SET
+                editor_version = excluded.editor_version,
+                status = excluded.status,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at;
+            """,
+            (
+                record["clip_id"],
+                int(record.get("editor_version", 1)),
+                str(record.get("status", "DRAFT")),
+                state_json,
+                record.get("created_at", now),
+                record.get("updated_at", now),
+            ),
+        )
+        conn.commit()
+    return record
+
+
+def get_editor_state(clip_id: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM editor_states WHERE clip_id = ?", (clip_id,)).fetchone()
+        if not row:
+            return None
+        st_json = json.loads(row["state_json"]) if row["state_json"] else {}
+        return {
+            "clip_id": row["clip_id"],
+            "editor_version": int(row["editor_version"]),
+            "status": row["status"],
+            "state_json": st_json,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+
+def save_export_artifact(export_dict: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    init_db(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO exports (
+                id, clip_id, editor_version, render_job_id, preset, render_type,
+                output_path, output_sha256, file_size, duration, resolution, created_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                editor_version = excluded.editor_version,
+                render_job_id = excluded.render_job_id,
+                preset = excluded.preset,
+                render_type = excluded.render_type,
+                output_path = excluded.output_path,
+                output_sha256 = excluded.output_sha256,
+                file_size = excluded.file_size,
+                duration = excluded.duration,
+                resolution = excluded.resolution,
+                status = excluded.status;
+            """,
+            (
+                export_dict["id"],
+                export_dict["clip_id"],
+                int(export_dict.get("editor_version", 1)),
+                export_dict.get("render_job_id"),
+                export_dict.get("preset", "tiktok"),
+                export_dict.get("render_type", "final"),
+                export_dict["output_path"],
+                export_dict.get("output_sha256"),
+                int(export_dict.get("file_size", 0)),
+                float(export_dict.get("duration", 0.0)),
+                export_dict.get("resolution", "1080x1920"),
+                export_dict.get("created_at", now),
+                export_dict.get("status", "EXPORTED"),
+            ),
+        )
+        conn.commit()
+    return export_dict
+
+
+def list_export_artifacts(clip_id: Optional[str] = None, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        if clip_id:
+            rows = conn.execute("SELECT * FROM exports WHERE clip_id = ? ORDER BY created_at DESC", (clip_id,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM exports ORDER BY created_at DESC").fetchall()
+
+        editor_versions = {
+            r["clip_id"]: int(r["editor_version"])
+            for r in conn.execute("SELECT clip_id, editor_version FROM editor_states").fetchall()
+        }
+
+        results = []
+        for r in rows:
+            c_id = r["clip_id"]
+            exp_ver = int(r["editor_version"])
+            curr_ver = editor_versions.get(c_id, exp_ver)
+            is_stale = curr_ver > exp_ver
+
+            results.append({
+                "id": r["id"],
+                "clip_id": c_id,
+                "editor_version": exp_ver,
+                "current_editor_version": curr_ver,
+                "is_stale": is_stale,
+                "stale_reason": f"Outdated export (rendered from v{exp_ver}, current state is v{curr_ver})" if is_stale else None,
+                "render_job_id": r["render_job_id"],
+                "preset": r["preset"],
+                "render_type": r["render_type"],
+                "output_path": r["output_path"],
+                "output_sha256": r["output_sha256"],
+                "file_size": int(r["file_size"]),
+                "duration": float(r["duration"]),
+                "resolution": r["resolution"],
+                "created_at": r["created_at"],
+                "status": "OUTDATED" if is_stale else r["status"],
+            })
+        return results
+
+
+def delete_export_artifact(export_id: str, db_path: Optional[Path] = None) -> bool:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM exports WHERE id = ?", (export_id,))
+        conn.commit()
+    return True
 def _format_job_row(row: sqlite3.Row) -> Dict[str, Any]:
     stages = []
     try:

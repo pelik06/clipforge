@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import ClipModal from './components/ClipModal';
 import {
   Film,
   Sparkles,
@@ -77,8 +78,29 @@ export default function Dashboard() {
   const [actionLoading, setActionLoading] = useState({});
   const [renderJobs, setRenderJobs] = useState([]);
   const [selectedPresetByClip, setSelectedPresetByClip] = useState({});
+  const [editingClip, setEditingClip] = useState(null);
+  const [exportsList, setExportsList] = useState([]);
 
   const pollIntervalRef = useRef(null);
+
+  const fetchExports = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/exports`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setExportsList(data.exports || []);
+      }
+    } catch (e) {}
+  };
+
+  const handleDeleteExport = async (exportId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v4/exports/${exportId}`, { method: 'DELETE' });
+      if (res.ok) {
+        await fetchExports();
+      }
+    } catch (e) {}
+  };
 
   const fetchRenderJobs = async () => {
     try {
@@ -192,9 +214,11 @@ export default function Dashboard() {
   useEffect(() => {
     fetchJobsAndClips();
     fetchRenderJobs();
+    fetchExports();
     pollIntervalRef.current = setInterval(() => {
       fetchJobsAndClips();
       fetchRenderJobs();
+      fetchExports();
       if (selectedJobId) {
         fetchSingleJob(selectedJobId);
       }
@@ -1260,6 +1284,79 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Export Library & Stale Export Detection (P5.17 & P5.18) */}
+        {exportsList.length > 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Film className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-lg font-semibold text-slate-100">Export Library</h2>
+              </div>
+              <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                {exportsList.length} {exportsList.length === 1 ? 'Artifact' : 'Artifacts'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {exportsList.map((exp) => (
+                <div
+                  key={exp.id}
+                  className={`p-3.5 rounded-xl border text-xs flex flex-col justify-between space-y-2 transition ${
+                    exp.is_stale ? 'bg-amber-950/20 border-amber-800/60' : 'bg-slate-950/80 border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-slate-200">{exp.clip_id} (v{exp.editor_version})</span>
+                    {exp.is_stale ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800 animate-pulse">
+                        OUTDATED EXPORT
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                        READY TO PUBLISH
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-[11px] font-mono text-slate-400 space-y-0.5">
+                    <div>Preset: <strong className="text-slate-200">{exp.preset}</strong> ({exp.resolution})</div>
+                    <div>Duration: <span className="text-slate-300">{exp.duration}s</span> • Size: <span className="text-slate-300">{(exp.file_size / (1024 * 1024)).toFixed(1)} MB</span></div>
+                    {exp.output_sha256 && (
+                      <div className="truncate text-[10px] text-slate-500 font-mono">
+                        SHA256: {exp.output_sha256.slice(0, 16)}...
+                      </div>
+                    )}
+                    {exp.is_stale && (
+                      <div className="text-[10px] text-amber-400 font-sans pt-1">
+                        ⚠️ {exp.stale_reason}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] font-mono">
+                    <a
+                      href={`/renders/${exp.output_path.split('\\').pop().split('/').pop()}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-400 hover:underline flex items-center space-x-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>Download MP4</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteExport(exp.id)}
+                      className="text-rose-400 hover:text-rose-300"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Review Queue & Generated Clips */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
@@ -1632,7 +1729,15 @@ export default function Dashboard() {
                     </div>
 
                     {/* Actions */}
-                    <div className="pt-2 flex items-center justify-between gap-3">
+                    <div className="pt-2 flex items-center justify-between gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => setEditingClip(clip)}
+                        className="px-2.5 py-1.5 rounded bg-[#1c2233] hover:bg-[#252f4a] text-cyan-300 border border-cyan-800/60 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Studio Editor</span>
+                      </button>
                       {isPending ? (
                         <>
                           <button
@@ -1672,6 +1777,16 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      {/* P5 CapCut-Style Studio Editor Modal */}
+      {editingClip && (
+        <ClipModal
+          clip={editingClip}
+          onClose={() => setEditingClip(null)}
+          onClipDecision={handleClipDecision}
+          actionLoading={actionLoading}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500 font-mono">

@@ -25,9 +25,21 @@ from apps.worker.pipeline_runner import (
     execute_job_pipeline_sync,
 )
 from services.render import RenderJobManager, get_preset_config
+from services.editor import (
+    EditorOperations,
+    EditorState,
+    EditorStateManager,
+    StudioRenderBridge,
+)
+from core.storage import (
+    delete_export_artifact,
+    list_export_artifacts,
+)
 from services.ingest.service import check_media_dependencies
 
 render_manager = RenderJobManager()
+editor_state_manager = EditorStateManager()
+render_bridge = StudioRenderBridge(render_manager=render_manager)
 app = FastAPI(title="ClipForge API", version="0.4.0")
 
 # Enable CORS for Next.js frontend (port 3000) and other dev origins
@@ -152,6 +164,17 @@ class BatchRenderRequest(BaseModel):
     preset: str = "tiktok"
     render_type: str = "final"
     priority: int = 10
+
+
+class EditorOperationRequest(BaseModel):
+    op: str
+    params: dict = {}
+
+
+class EditorRenderRequest(BaseModel):
+    preset: str = "tiktok"
+
+
 async def run_pipeline_background(job_id: str, vod_url: str, kind: str, config: Optional[dict] = None):
     """Run the 13-stage pipeline in an async executor thread."""
     loop = asyncio.get_event_loop()
@@ -468,6 +491,103 @@ async def batch_render(req: BatchRenderRequest, background_tasks: BackgroundTask
     return {"status": "queued", "count": len(created_jobs), "jobs": created_jobs}
 
 
+@app.get("/api/v4/editor/{clip_id}")
+def get_editor_state_endpoint(clip_id: str):
+    clips = list_clips()
+    target_clip = next((c for c in clips if c["id"] == clip_id), None)
+    if not target_clip:
+        for f in FIXTURES_STORE:
+            if f["id"] == clip_id:
+                target_clip = f
+                break
+    if not target_clip:
+        raise HTTPException(status_code=404, detail=f"Clip {clip_id} not found")
+
+    state = editor_state_manager.load_or_initialize(target_clip)
+    return {"status": "success", "state": state.to_dict()}
+
+
+@app.put("/api/v4/editor/{clip_id}")
+def save_editor_state_endpoint(clip_id: str, state_dict: dict):
+    state_dict["clip_id"] = clip_id
+    try:
+        state = EditorState.from_dict(state_dict)
+        saved = editor_state_manager.save(state)
+        return {"status": "saved", "state": saved.to_dict()}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@app.post("/api/v4/editor/{clip_id}/operation")
+def apply_editor_operation(clip_id: str, req: EditorOperationRequest):
+    clips = list_clips()
+    target_clip = next((c for c in clips if c["id"] == clip_id), None) or {"id": clip_id}
+    state = editor_state_manager.load_or_initialize(target_clip)
+
+    op = req.op.lower()
+    p = req.params
+
+    try:
+        if op == "trim":
+            new_state = EditorOperations.trim(state, float(p["start"]), float(p["end"]))
+        elif op == "caption_text":
+            new_state = EditorOperations.edit_caption_text(state, str(p["caption_id"]), str(p["text"]))
+        elif op == "caption_timing":
+            new_state = EditorOperations.edit_caption_timing(state, str(p["caption_id"]), float(p["start"]), float(p["end"]))
+        elif op == "caption_add":
+            new_state = EditorOperations.add_caption(state, float(p["start"]), float(p["end"]), str(p["text"]), style=p.get("style"), emphasis=bool(p.get("emphasis", False)))
+        elif op == "caption_delete":
+            new_state = EditorOperations.delete_caption(state, str(p["caption_id"]))
+        elif op == "caption_split":
+            new_state = EditorOperations.split_caption(state, str(p["caption_id"]), float(p["split_time"]))
+        elif op == "caption_merge":
+            new_state = EditorOperations.merge_captions(state, str(p["caption_id_1"]), str(p["caption_id_2"]))
+        elif op == "crop":
+            new_state = EditorOperations.set_crop(state, float(p.get("x", 0.0)), float(p.get("y", 0.0)), float(p.get("width", 1.0)), float(p.get("height", 1.0)), scale=float(p.get("scale", 1.0)), mode=str(p.get("mode", "manual")))
+        elif op == "layout":
+            new_state = EditorOperations.set_layout(state, str(p["layout"]))
+        elif op == "audio":
+            new_state = EditorOperations.set_audio(state, volume=float(p.get("volume", 1.0)), mute=bool(p.get("mute", False)), fade_in=float(p.get("fade_in", 0.0)), fade_out=float(p.get("fade_out", 0.0)))
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported operation '{op}'")
+
+        saved = editor_state_manager.save(new_state)
+        return {"status": "success", "state": saved.to_dict()}
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+
+@app.post("/api/v4/editor/{clip_id}/preview")
+async def render_editor_preview(clip_id: str, req: EditorRenderRequest, background_tasks: BackgroundTasks):
+    clips = list_clips()
+    target_clip = next((c for c in clips if c["id"] == clip_id), None) or {"id": clip_id}
+    state = editor_state_manager.load_or_initialize(target_clip)
+
+    job, snapshot = render_bridge.submit_render(state, preset="preview", render_type="preview", priority=20)
+    background_tasks.add_task(render_manager.process_queue_sync, 1)
+    return {"status": "queued", "job": job.to_dict(), "snapshot": snapshot.to_dict()}
+
+
+@app.post("/api/v4/editor/{clip_id}/render")
+async def render_editor_final(clip_id: str, req: EditorRenderRequest, background_tasks: BackgroundTasks):
+    clips = list_clips()
+    target_clip = next((c for c in clips if c["id"] == clip_id), None) or {"id": clip_id}
+    state = editor_state_manager.load_or_initialize(target_clip)
+
+    job, snapshot = render_bridge.submit_render(state, preset=req.preset, render_type="final", priority=25)
+    background_tasks.add_task(render_manager.process_queue_sync, 1)
+    return {"status": "queued", "job": job.to_dict(), "snapshot": snapshot.to_dict()}
+
+
+@app.get("/api/v4/exports")
+def get_export_library(clip_id: Optional[str] = None):
+    return {"exports": list_export_artifacts(clip_id=clip_id)}
+
+
+@app.delete("/api/v4/exports/{export_id}")
+def delete_export(export_id: str):
+    ok = delete_export_artifact(export_id)
+    return {"status": "deleted" if ok else "not_found", "export_id": export_id}
 # Mount generated media files directory
 media_dir = Path(__file__).resolve().parent.parent.parent / "data" / "output"
 media_dir.mkdir(parents=True, exist_ok=True)
