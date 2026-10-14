@@ -151,7 +151,7 @@ class MomentSelector:
                             )
                         )
                     if td_candidates:
-                        valid_td = td.deduplicate_thoughts(td_candidates, max_clips=max_clips)
+                        valid_td = td.deduplicate_thoughts(td_candidates, max_clips=max(15, max_clips * 2))
                         if valid_td:
                             return valid_td
             except Exception:

@@ -41,25 +41,26 @@ class SceneDetector:
         frame_idx = 0
 
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-
             if frame_idx % sample_step == 0:
+                ret, frame = cap.read()
+                if not ret:
+                    break
                 t_sec = round(frame_idx / video_fps, 2)
-                # Compute 2D HSV color histogram
-                hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-                hist = cv2.calcHist([hsv], [0, 1], None, [24, 24], [0, 180, 0, 256])
+                thumb = cv2.resize(frame, (160, 90))
+                hsv = cv2.cvtColor(thumb, cv2.COLOR_BGR2HSV)
+                hist = cv2.calcHist([hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
                 cv2.normalize(hist, hist, 0, 1, cv2.NORM_MINMAX)
 
                 if prev_hist is not None:
-                    # Compare histogram correlation: drops below threshold on scene transition
                     score = cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL)
                     if score < self.correlation_threshold:
                         if (t_sec - scene_boundaries[-1]) >= min_scene_duration:
                             scene_boundaries.append(t_sec)
 
                 prev_hist = hist
+            else:
+                if not cap.grab():
+                    break
 
             frame_idx += 1
 

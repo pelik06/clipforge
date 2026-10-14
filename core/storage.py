@@ -241,8 +241,8 @@ def save_job(job: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, A
                 job.get("moment_detection_mode", "heuristic"),
                 job.get("moment_detection_provider", "gemini"),
                 int(job.get("max_clips", 5)),
-                float(job.get("min_clip_duration", 12.0)),
-                float(job.get("max_clip_duration", 60.0)),
+                float(job.get("min_clip_duration", 45.0)),
+                float(job.get("max_clip_duration", 120.0)),
                 1 if job.get("enable_scene_detection", True) else 0,
             ),
         )

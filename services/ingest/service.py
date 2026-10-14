@@ -204,9 +204,10 @@ def download_youtube_segment(
         "quiet": True,
         "no_warnings": True,
         "outtmpl": str(out.with_suffix("")),
-        "format": "bestvideo[protocol=https]+bestaudio[protocol=https]/bestvideo[protocol=m3u8_native]+bestaudio/bestvideo+bestaudio/best",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo+bestaudio/best",
+        "merge_output_format": "mp4",
         "download_ranges": yt_dlp.utils.download_range_func(None, [(start_sec, start_sec + duration_sec)]),
-        "force_keyframes_at_cuts": True,
+        "force_keyframes_at_cuts": False,
         "max_filesize": max_filesize_mb * 1024 * 1024,
     }
     if ffmpeg_loc:

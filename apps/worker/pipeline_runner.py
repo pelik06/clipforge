@@ -574,21 +574,36 @@ def execute_job_pipeline_sync(
                 except Exception:
                     clip_segments = None
 
-                if clip_segments:
-                    cr.render(
-                        transcript_segments=clip_segments,
-                        video_path=str(reframe_path),
-                        output_path=str(cand_final),
-                        config=job_cfg,
-                        clip_start=0.0,
-                        clip_end=cand.duration,
-                    )
-                else:
+                try:
+                    if clip_segments:
+                        cr.render(
+                            transcript_segments=clip_segments,
+                            video_path=str(reframe_path),
+                            output_path=str(cand_final),
+                            config=job_cfg,
+                            clip_start=0.0,
+                            clip_end=cand.duration,
+                        )
+                    else:
+                        cr.render(
+                            transcript_segments=transcript_segments,
+                            video_path=str(reframe_path),
+                            output_path=str(cand_final),
+                            config=job_cfg,
+                            clip_start=cand.start,
+                            clip_end=cand.end,
+                        )
+                except Exception as render_err:
+                    logger.warning(f"Caption render fallback for clip {idx}: {render_err}")
+                    import copy
+                    fallback_cfg = copy.copy(job_cfg)
+                    fallback_cfg.caption_preset = "clean"
+                    fallback_cfg.caption_word_highlight = False
                     cr.render(
                         transcript_segments=transcript_segments,
                         video_path=str(reframe_path),
                         output_path=str(cand_final),
-                        config=job_cfg,
+                        config=fallback_cfg,
                         clip_start=cand.start,
                         clip_end=cand.end,
                     )

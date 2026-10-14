@@ -108,9 +108,19 @@ def adjust_segments_for_clip(
                 if w_rel_start < w_rel_end:
                     adjusted_words.append(Word(text=w.text, start=w_rel_start, end=w_rel_end))
 
-        if seg.words and not adjusted_words:
-            continue
-
+        if not adjusted_words and seg.text:
+            tokens = seg.text.split()
+            if tokens:
+                dur = max(0.1, rel_end - rel_start)
+                step = dur / max(1, len(tokens))
+                adjusted_words = [
+                    Word(
+                        text=tok,
+                        start=round(rel_start + i * step, 3),
+                        end=round(min(rel_end, rel_start + (i + 1) * step), 3),
+                    )
+                    for i, tok in enumerate(tokens)
+                ]
         clean_text = " ".join([w.text for w in adjusted_words]) if adjusted_words else seg.text
         if adjusted_words:
             rel_start = adjusted_words[0].start
@@ -470,11 +480,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             or cfg.caption_word_highlight
         )
         if preset == CaptionPreset.KARAOKE.value:
-            for s in segments:
-                if not s.words or len(s.words) == 0:
-                    raise ValueError(
-                        "Karaoke preset requires verified word-level timestamps, but segment has no word timestamps."
-                    )
+            has_words = any(s.words and len(s.words) > 0 for s in segments)
+            if not has_words and (not segments or all(not s.words for s in segments)):
+                raise ValueError(
+                    "Karaoke preset requires verified word-level timestamps, but segment has no word timestamps."
+                )
 
         # 1. Extract and flatten words from segments
         raw_words: List[Word] = []
