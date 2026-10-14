@@ -32,18 +32,20 @@ class TrajectoryPoint:
     target_y: float
     crop_x: float
     crop_y: float
+    is_scene_cut: bool = False
 
 
 @dataclass
 class ReframingAnalysis:
     mode: str
-    active_speaker_available: bool = False  # Critical rule: Active speaker detection unavailable, report as fallback
+    active_speaker_available: bool = False  # Transparent disclosure
     face_detection_available: bool = False
     fallback_applied: bool = False
     fallback_reason: Optional[str] = None
     detections: List[Detection] = field(default_factory=list)
     trajectory: List[TrajectoryPoint] = field(default_factory=list)
     primary_track_id: Optional[int] = None
+
 
 class ReframingResult(str):
     analysis: ReframingAnalysis
@@ -55,8 +57,38 @@ class ReframingResult(str):
         instance.filter_applied = filter_applied
         return instance
 
+
+def compute_iou(boxA: Tuple[float, float, float, float], boxB: Tuple[float, float, float, float]) -> float:
+    """Compute Intersection over Union between two bounding boxes (x, y, w, h)."""
+    xA = max(boxA[0], boxB[0])
+    yA = max(boxA[1], boxB[1])
+    xB = min(boxA[0] + boxA[2], boxB[0] + boxB[2])
+    yB = min(boxA[1] + boxA[3], boxB[1] + boxB[3])
+
+    inter = max(0.0, xB - xA) * max(0.0, yB - yA)
+    areaA = boxA[2] * boxA[3]
+    areaB = boxB[2] * boxB[3]
+    denom = areaA + areaB - inter
+    if denom <= 0.0:
+        return 0.0
+    return inter / denom
+
+
+def compute_center_similarity(
+    centerA: Tuple[float, float],
+    centerB: Tuple[float, float],
+    frame_w: float,
+    frame_h: float,
+) -> float:
+    """Compute normalized spatial center proximity similarity [0.0, 1.0]."""
+    diag = math.hypot(frame_w, frame_h)
+    dist = math.hypot(centerA[0] - centerB[0], centerA[1] - centerB[1])
+    norm_dist = dist / max(1.0, diag)
+    return max(0.0, 1.0 - (norm_dist / 0.35))
+
+
 class Reframer:
-    """Speaker-aware auto-reframing into vertical 9:16 format with temporal smoothing."""
+    """Speaker-aware auto-reframing into vertical 9:16 format with persistent tracking and scene-cut snapping."""
 
     def __init__(self, model_path: Optional[str] = None):
         self.settings = Settings()
@@ -79,8 +111,9 @@ class Reframer:
         out_width: int = 1080,
         out_height: int = 1920,
         scenes: Optional[List[Dict[str, float]]] = None,
+        framing_mode: str = "track",
     ) -> ReframingAnalysis:
-        """Sample video frames, detect faces, track primary subject, and compute smoothed crop trajectory."""
+        """Sample video frames, track faces with persistent IDs, and compute smoothed trajectory with scene snaps."""
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             return ReframingAnalysis(
@@ -97,6 +130,17 @@ class Reframer:
         source_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1080)
         duration = total_frames / video_fps if total_frames > 0 else 5.0
 
+        # Mode check: if GENERAL / center crop requested, return center crop immediately
+        if framing_mode in (FramingMode.CENTER_CROP.value, FramingMode.GENERAL.value):
+            cap.release()
+            return ReframingAnalysis(
+                mode="center_crop",
+                active_speaker_available=False,
+                face_detection_available=True,
+                fallback_applied=True,
+                fallback_reason="General / center crop requested explicitly.",
+            )
+
         detector = self._get_detector(source_w, source_h)
         if detector is None:
             cap.release()
@@ -110,12 +154,14 @@ class Reframer:
 
         detector.setInputSize((source_w, source_h))
 
-        # Sample frames at sample_fps interval
         sample_interval = max(1, int(round(video_fps / sample_fps)))
         raw_detections: List[Detection] = []
         tracks: Dict[int, Dict[str, Any]] = {}
         next_track_id = 1
         frame_idx = 0
+
+        track_timeout = self.settings.track_timeout
+        scene_cuts = [s["start"] for s in (scenes or []) if s.get("start", 0) > 0.3]
 
         while True:
             ret, frame = cap.read()
@@ -124,10 +170,10 @@ class Reframer:
 
             if frame_idx % sample_interval == 0:
                 t_sec = round(frame_idx / video_fps, 3)
-                # Scene-aware tracking reset: do not carry tracking across scene transitions
-                scene_cuts = [s["start"] for s in (scenes or []) if s.get("start", 0) > 0.3]
-                if any(abs(t_sec - cut_t) < 0.35 for cut_t in scene_cuts):
-                    tracks.clear()
+
+                # Check if frame is crossing a scene cut
+                is_near_scene_cut = any(abs(t_sec - cut_t) < 0.25 for cut_t in scene_cuts)
+
                 try:
                     _, faces = detector.detect(frame)
                 except Exception:
@@ -141,35 +187,54 @@ class Reframer:
                         if fw > 20 and fh > 20 and conf >= 0.55:
                             current_frame_dets.append((fx, fy, fw, fh, conf))
 
-                # Frame-to-frame tracking
-                for fx, fy, fw, fh, conf in current_frame_dets:
+                # Persistent Multi-Object Tracking Matching (IoU + Center Distance)
+                # Filter active tracks within timeout
+                active_track_ids = [
+                    tid for tid, tinfo in tracks.items()
+                    if (t_sec - tinfo["last_seen_t"]) <= track_timeout
+                ]
+
+                # Compute match matrix: current_frame_dets x active_track_ids
+                matched_detections = set()
+                matched_tracks = set()
+                candidate_pairs = []
+
+                for det_idx, (fx, fy, fw, fh, conf) in enumerate(current_frame_dets):
+                    cx = fx + fw / 2.0
+                    cy = fy + fh / 2.0
+                    det_box = (fx, fy, fw, fh)
+                    det_center = (cx, cy)
+
+                    for tid in active_track_ids:
+                        tinfo = tracks[tid]
+                        last_box = tinfo["last_bbox"]
+                        last_center = (tinfo["last_cx"], tinfo["last_cy"])
+
+                        iou = compute_iou(det_box, last_box)
+                        center_sim = compute_center_similarity(det_center, last_center, source_w, source_h)
+                        match_score = 0.5 * iou + 0.5 * center_sim
+
+                        if match_score >= 0.20 or center_sim >= 0.40:
+                            candidate_pairs.append((match_score, det_idx, tid))
+
+                # Greedy bipartite matching (highest score first)
+                candidate_pairs.sort(key=lambda x: x[0], reverse=True)
+                for score, det_idx, tid in candidate_pairs:
+                    if det_idx in matched_detections or tid in matched_tracks:
+                        continue
+                    matched_detections.add(det_idx)
+                    matched_tracks.add(tid)
+
+                    fx, fy, fw, fh, conf = current_frame_dets[det_idx]
                     cx = fx + fw / 2.0
                     cy = fy + fh / 2.0
 
-                    best_tid = None
-                    best_dist = float("inf")
-                    for tid, tinfo in tracks.items():
-                        # Track matching threshold: within 35% of frame width
-                        dist = math.hypot(cx - tinfo["last_cx"], cy - tinfo["last_cy"])
-                        if dist < (source_w * 0.35) and dist < best_dist:
-                            best_dist = dist
-                            best_tid = tid
-
-                    if best_tid is None:
-                        best_tid = next_track_id
-                        next_track_id += 1
-                        tracks[best_tid] = {
-                            "first_t": t_sec,
-                            "count": 0,
-                            "total_area": 0.0,
-                            "last_cx": cx,
-                            "last_cy": cy,
-                        }
-
-                    tracks[best_tid]["count"] += 1
-                    tracks[best_tid]["total_area"] += (fw * fh)
-                    tracks[best_tid]["last_cx"] = cx
-                    tracks[best_tid]["last_cy"] = cy
+                    tracks[tid]["count"] += 1
+                    tracks[tid]["total_area"] += (fw * fh)
+                    tracks[tid]["last_seen_t"] = t_sec
+                    tracks[tid]["last_cx"] = cx
+                    tracks[tid]["last_cy"] = cy
+                    tracks[tid]["last_bbox"] = (fx, fy, fw, fh)
 
                     det_obj = Detection(
                         frame_index=frame_idx,
@@ -180,15 +245,44 @@ class Reframer:
                         width=fw,
                         height=fh,
                         confidence=conf,
-                        track_id=best_tid,
+                        track_id=tid,
                     )
                     raw_detections.append(det_obj)
+
+                # Initialize new tracks for unmatched detections
+                for det_idx, (fx, fy, fw, fh, conf) in enumerate(current_frame_dets):
+                    if det_idx not in matched_detections:
+                        tid = next_track_id
+                        next_track_id += 1
+                        cx = fx + fw / 2.0
+                        cy = fy + fh / 2.0
+                        tracks[tid] = {
+                            "first_t": t_sec,
+                            "last_seen_t": t_sec,
+                            "count": 1,
+                            "total_area": fw * fh,
+                            "last_cx": cx,
+                            "last_cy": cy,
+                            "last_bbox": (fx, fy, fw, fh),
+                        }
+                        det_obj = Detection(
+                            frame_index=frame_idx,
+                            timestamp=t_sec,
+                            bbox=(int(fx), int(fy), int(fw), int(fh)),
+                            center_x=cx,
+                            center_y=cy,
+                            width=fw,
+                            height=fh,
+                            confidence=conf,
+                            track_id=tid,
+                        )
+                        raw_detections.append(det_obj)
 
             frame_idx += 1
 
         cap.release()
 
-        # If no faces detected anywhere in video, fallback to center crop
+        # Center crop fallback if no faces found
         if not raw_detections or not tracks:
             return ReframingAnalysis(
                 mode="fallback_center",
@@ -203,55 +297,56 @@ class Reframer:
         primary_dets = {d.timestamp: d for d in raw_detections if d.track_id == primary_tid}
 
         # Calculate crop coordinates in 1080x1920 vertical space
-        # Aspect scaling: scale so video height is at least out_height (1920)
         scale_factor = out_height / float(source_h)
         scaled_w = source_w * scale_factor
-        scaled_h = source_h * scale_factor  # = 1920
+        scaled_h = source_h * scale_factor  # 1920
         max_crop_x = max(0.0, scaled_w - out_width)
         default_center_x = max_crop_x / 2.0
 
-        # Construct raw trajectory at sampled timestamps
         sampled_timestamps = sorted(list(set(d.timestamp for d in raw_detections)))
         if not sampled_timestamps:
             sampled_timestamps = [0.0]
 
-        raw_points: List[Tuple[float, float, float, float, float]] = []
+        raw_points: List[Tuple[float, float, float, float, float, bool]] = []
         last_known_cx = source_w / 2.0
         last_known_cy = source_h * 0.35
 
         for ts in sampled_timestamps:
+            is_cut = any(abs(ts - cut_t) < 0.30 for cut_t in scene_cuts)
             if ts in primary_dets:
                 d = primary_dets[ts]
                 last_known_cx = d.center_x
                 last_known_cy = d.center_y
+            elif is_cut:
+                # On scene cut without primary face, search any detected face at this timestamp
+                cur_faces = [d for d in raw_detections if d.timestamp == ts]
+                if cur_faces:
+                    best_f = max(cur_faces, key=lambda f: f.width * f.height)
+                    last_known_cx = best_f.center_x
+                    last_known_cy = best_f.center_y
 
-            # Scale to vertical space
             target_scaled_x = last_known_cx * scale_factor
             target_scaled_y = last_known_cy * scale_factor
-
-            # Desired crop window X centered on target face
             desired_crop_x = target_scaled_x - (out_width / 2.0)
             clamped_crop_x = max(0.0, min(max_crop_x, desired_crop_x))
             crop_y = 0.0
 
-            raw_points.append((ts, last_known_cx, last_known_cy, clamped_crop_x, crop_y))
+            raw_points.append((ts, last_known_cx, last_known_cy, clamped_crop_x, crop_y, is_cut))
 
-        # Temporal Smoothing with Safe Deadband & Jump Confirmation
+        # Temporal Smoothing with Scene-Cut Instant Snap
         smoothed_trajectory: List[TrajectoryPoint] = []
-        alpha = 0.25
+        alpha = self.settings.reframe_smoothing
         smoothed_x = default_center_x if not raw_points else raw_points[0][3]
         jump_confirm_count = 0
 
-        for i, (ts, tcx, tcy, cx, cy) in enumerate(raw_points):
-            scene_cuts = [s["start"] for s in (scenes or []) if s.get("start", 0) > 0.3]
-            if any(abs(ts - cut_t) < 0.4 for cut_t in scene_cuts):
+        for i, (ts, tcx, tcy, cx, cy, is_cut) in enumerate(raw_points):
+            if is_cut and self.settings.scene_cut_snap:
+                # INSTANT SNAP at scene cut: reset smoothing and jump immediately
                 smoothed_x = cx
                 jump_confirm_count = 0
             else:
-                # Safe Zone Deadband: ignore minor jitter < 25 pixels
+                # Within scene: smooth tracking with deadband
                 target_shift = smoothed_x if abs(cx - smoothed_x) < 25.0 else cx
-
-                # Jump Confirmation (JUMP_CONFIRM_FRAMES = 3)
                 if abs(target_shift - smoothed_x) > 180.0:
                     jump_confirm_count += 1
                     if jump_confirm_count < 3:
@@ -269,12 +364,13 @@ class Reframer:
                     target_y=round(tcy, 2),
                     crop_x=round(final_crop_x, 2),
                     crop_y=round(cy, 2),
+                    is_scene_cut=is_cut,
                 )
             )
 
         return ReframingAnalysis(
             mode="speaker_aware_tracking",
-            active_speaker_available=False,  # Transparent fallback disclosure per Constitution & Task 2.6
+            active_speaker_available=False,
             face_detection_available=True,
             fallback_applied=False,
             fallback_reason="Active speaker detection unavailable; using face/person tracking fallback.",
@@ -291,8 +387,7 @@ class Reframer:
         out_w: int = 1080,
         out_h: int = 1920,
     ) -> str:
-        """Build FFmpeg video filter for static or trajectory-guided reframing."""
-        # Scale to match height 1920
+        """Build FFmpeg video filter for static or trajectory-guided reframing with scene-cut snapping."""
         scale_filter = f"scale={out_w}:{out_h}:force_original_aspect_ratio=increase"
 
         if (
@@ -300,10 +395,10 @@ class Reframer:
             or not analysis.trajectory
             or len(analysis.trajectory) < 2
         ):
-            # Center crop fallback
             return f"{scale_filter},crop={out_w}:{out_h}"
-        # Downsample trajectory if too long to prevent FFmpeg expression stack overflow (max 24 points)
+
         pts = analysis.trajectory
+        # Downsample trajectory to max 24 keypoints to avoid FFmpeg recursion depth limit
         if len(pts) > 24:
             step = math.ceil(len(pts) / 24)
             sampled_pts = pts[::step]
@@ -315,9 +410,16 @@ class Reframer:
         for i in range(len(pts) - 2, -1, -1):
             p0 = pts[i]
             p1 = pts[i + 1]
-            dt = max(0.001, p1.timestamp - p0.timestamp)
-            dx = p1.crop_x - p0.crop_x
-            seg = f"({p0.crop_x:.1f}+({dx:.2f})*(t-{p0.timestamp:.2f})/{dt:.3f})"
+
+            if p1.is_scene_cut and self.settings.scene_cut_snap:
+                # Instant snap at scene cut: before p1.timestamp hold p0.crop_x, at p1 jump to p1.crop_x
+                seg = f"{p0.crop_x:.1f}"
+            else:
+                # Within scene: linear interpolation between keypoints
+                dt = max(0.001, p1.timestamp - p0.timestamp)
+                dx = p1.crop_x - p0.crop_x
+                seg = f"({p0.crop_x:.1f}+({dx:.2f})*(t-{p0.timestamp:.2f})/{dt:.3f})"
+
             expr = f"if(lt(t,{p1.timestamp:.2f}),{seg},{expr})"
 
         scale_str = f"scale=w='max({out_w},trunc(iw*{out_h}/ih/2)*2)':h={out_h}"
@@ -329,7 +431,7 @@ class Reframer:
         output_path: str,
         width: int = 1080,
         height: int = 1920,
-        framing_mode: str = "center_crop",
+        framing_mode: str = "track",
         scenes: Optional[List[Dict[str, float]]] = None,
     ) -> Dict[str, Any]:
         """Render source footage into vertical 9:16 short format applying requested framing mode."""
@@ -344,7 +446,6 @@ class Reframer:
 
         s = Settings()
 
-        # Probe input video dimensions
         probe_cmd = [
             s.ffprobe_bin,
             "-v", "error",
@@ -362,19 +463,14 @@ class Reframer:
             except Exception:
                 pass
 
-        analysis = ReframingAnalysis(
-            mode=framing_mode,
-            active_speaker_available=False,
-            fallback_applied=False,
+        analysis = self.analyze_footage(
+            str(source),
+            out_width=width,
+            out_height=height,
+            scenes=scenes,
+            framing_mode=framing_mode,
         )
-
-        if framing_mode == FramingMode.AUTO_FOLLOW_SPEAKER.value:
-            # Perform face/person detection & tracking analysis with scene-aware resets
-            analysis = self.analyze_footage(str(source), out_width=width, out_height=height, scenes=scenes)
-            filter_str = self.build_crop_filter(analysis, src_w, src_h, width, height)
-        else:
-            # Center crop default
-            filter_str = f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}"
+        filter_str = self.build_crop_filter(analysis, src_w, src_h, out_w=width, out_h=height)
 
         cmd = [
             s.ffmpeg_bin,
@@ -398,7 +494,6 @@ class Reframer:
         )
 
         if proc.returncode != 0:
-            # Transcode audio fallback if container copy fails
             fallback_cmd = [
                 s.ffmpeg_bin,
                 "-y",
@@ -419,9 +514,11 @@ class Reframer:
                 timeout=180,
             )
             if proc.returncode != 0:
-                raise RuntimeError(f"FFmpeg vertical reframing failed (code {proc.returncode}): {proc.stderr[-400:]}")
+                raise RuntimeError(
+                    f"FFmpeg vertical reframing render failed (code {proc.returncode}): {proc.stderr[-400:]}"
+                )
 
         if not out.exists() or out.stat().st_size == 0:
-            raise RuntimeError(f"Reframing completed but output file missing or empty: {output_path}")
+            raise RuntimeError(f"Render completed but output file does not exist or is empty: {output_path}")
 
         return ReframingResult(str(out), analysis=analysis, filter_applied=filter_str)

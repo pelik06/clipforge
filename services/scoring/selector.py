@@ -88,18 +88,19 @@ class MomentSelector:
         media_path: Optional[str] = None,
     ) -> List[CandidateMoment]:
         """Multi-signal heuristic selection integrating audio energy, motion, face, and speech."""
+        eff_min_dur = min(min_duration, max(4.0, video_duration / 4.0)) if video_duration < 45.0 else min_duration
         if media_path and Path(media_path).exists():
             try:
                 from services.detection.moment_pipeline import NonLLMMomentDetector
-                detector = NonLLMMomentDetector()
+                detector = NonLLMMomentDetector(moment_threshold=0.45)
                 moments = detector.detect_moments(
                     media_path=media_path,
                     transcript_segments=transcript_segments,
-                    min_clip_duration=min_duration,
+                    min_clip_duration=eff_min_dur,
                     max_clip_duration=max_duration,
                     max_clips=max_clips,
                 )
-                if moments:
+                if moments and len(moments) >= 2:
                     return moments
             except Exception:
                 pass
@@ -107,28 +108,72 @@ class MomentSelector:
         candidates: List[CandidateMoment] = []
 
         if transcript_segments and len(transcript_segments) > 0:
-            # Group sentence segments into complete thought candidates
+            try:
+                from services.detection.thought_detector import ThoughtDetector, extract_sentences
+                td = ThoughtDetector(
+                    min_clip_duration=eff_min_dur,
+                    max_clip_duration=max_duration,
+                    max_overlap_ratio=0.35,
+                    max_containment_ratio=0.50,
+                )
+                sentences = extract_sentences(transcript_segments)
+                if sentences:
+                    tw_list = td.identify_thought_windows(
+                        sentences,
+                        total_duration=video_duration,
+                        scenes=scenes,
+                    )
+                    td_candidates: List[CandidateMoment] = []
+                    for tw in tw_list:
+                        dur = tw.duration
+                        if dur < eff_min_dur or dur > max_duration:
+                            continue
+                        score = td.score_thought_window(
+                            tw,
+                            scenes=scenes,
+                            total_duration=video_duration,
+                        )
+                        reasons = []
+                        if tw.has_hook:
+                            reasons.append("Strong opening conversational hook")
+                        if tw.has_payoff:
+                            reasons.append("Complete resolution & payoff")
+                        reasons.append(f"Complete conversational thought ({dur:.1f}s)")
+                        td_candidates.append(
+                            CandidateMoment(
+                                start=round(tw.start, 2),
+                                end=round(tw.end, 2),
+                                score=round(score, 1),
+                                reasons=reasons,
+                                signals={"duration": dur},
+                            )
+                        )
+                    if td_candidates:
+                        valid_td = td.deduplicate_thoughts(td_candidates, max_clips=max_clips)
+                        if valid_td:
+                            return valid_td
+            except Exception:
+                pass
+
+            # Secondary Fallback: Dynamic lookahead loop up to max_duration
             n = len(transcript_segments)
             for i in range(n):
-                for j in range(i, min(n, i + 6)):
-                    t_start = max(0.0, transcript_segments[i].start - 0.25)
+                t_start = max(0.0, transcript_segments[i].start - 0.25)
+                for j in range(i, n):
                     t_end = min(video_duration, transcript_segments[j].end + 0.35)
                     dur = t_end - t_start
-
-                    if dur < min_duration or dur > max_duration:
+                    if dur > max_duration:
+                        break
+                    if dur < eff_min_dur:
                         continue
-
-                    # Check alignment with scene cuts
                     scene_aligned = any(abs(t_start - s["start"]) < 1.0 or abs(t_end - s["end"]) < 1.0 for s in scenes)
-                    score = 72.0 + (10.0 if scene_aligned else 0.0) + max(0.0, 15.0 - abs(dur - 25.0) / 2.0)
-
+                    score = 72.0 + (10.0 if scene_aligned else 0.0) + max(0.0, 15.0 - abs(dur - 35.0) / 2.0)
                     reasons = [
                         "Complete sentence thought",
-                        f"Target short duration ({dur:.1f}s)",
+                        f"Target duration ({dur:.1f}s)",
                     ]
                     if scene_aligned:
                         reasons.append("Aligned with visual scene boundary")
-
                     candidates.append(
                         CandidateMoment(
                             start=round(t_start, 2),
@@ -138,7 +183,6 @@ class MomentSelector:
                             signals={"duration": dur, "scene_aligned": 1.0 if scene_aligned else 0.0},
                         )
                     )
-
         # Fallback to scene cuts if transcript is empty
         if not candidates and scenes:
             for sc in scenes:
@@ -154,22 +198,9 @@ class MomentSelector:
                         )
                     )
 
-        # Final timeline sliding window fallback
+        # If no genuine acoustic/speech candidates found, return empty list (NO_VALID_MOMENTS)
         if not candidates:
-            step = max(min_duration, 15.0)
-            curr = 0.0
-            while curr + min_duration <= video_duration:
-                end_t = min(video_duration, curr + step)
-                candidates.append(
-                    CandidateMoment(
-                        start=round(curr, 2),
-                        end=round(end_t, 2),
-                        score=70.0,
-                        reasons=[f"Timeline candidate window ({end_t - curr:.1f}s)"],
-                        signals={"duration": end_t - curr},
-                    )
-                )
-                curr += step * 0.75
+            return []
 
         return candidates
 

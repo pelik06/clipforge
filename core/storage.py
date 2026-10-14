@@ -4,20 +4,28 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import datetime
 
+import os
+
+def get_default_db_path() -> Path:
+    data_dir = os.getenv("CLIPFORGE_DATA_DIR", "./data")
+    return Path(data_dir) / "clipforge.db"
+
 DEFAULT_DB_PATH = Path("data/clipforge.db")
 
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    target = db_path or DEFAULT_DB_PATH
+    target = db_path or get_default_db_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(target), timeout=15.0)
+    conn = sqlite3.connect(str(target), timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=15000;")
     return conn
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
     with get_connection(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS jobs (

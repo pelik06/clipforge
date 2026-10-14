@@ -1,6 +1,9 @@
 import asyncio
 import copy
 import datetime
+import logging
+
+logger = logging.getLogger("clipforge.runner")
 import os
 import time
 import uuid
@@ -23,6 +26,7 @@ from services.ingest.service import (
     check_media_dependencies,
     download_youtube_segment,
     extract_youtube_metadata,
+    fetch_youtube_transcript,
     validate_source,
 )
 from services.qc.service import QualityController
@@ -139,7 +143,7 @@ def execute_job_pipeline_sync(
         "caption_word_highlight": existing_job.get("caption_word_highlight", False),
     }
     job_cfg = JobConfig(
-        framing_mode=raw_cfg.get("framing_mode", "center_crop"),
+        framing_mode=raw_cfg.get("framing_mode", "auto_follow_speaker"),
         caption_preset=raw_cfg.get("caption_preset", "clean"),
         caption_language=raw_cfg.get("caption_language", "auto"),
         caption_size=raw_cfg.get("caption_size", "medium"),
@@ -147,6 +151,12 @@ def execute_job_pipeline_sync(
         caption_text_color=raw_cfg.get("caption_text_color", "#FFFFFF"),
         caption_highlight_color=raw_cfg.get("caption_highlight_color", "#FFFF00"),
         caption_word_highlight=bool(raw_cfg.get("caption_word_highlight", False)),
+        moment_detection_mode=raw_cfg.get("moment_detection_mode", "heuristic"),
+        moment_detection_provider=raw_cfg.get("moment_detection_provider", "heuristic"),
+        max_clips=int(raw_cfg.get("max_clips", 3)),
+        min_clip_duration=float(raw_cfg.get("min_clip_duration", 30.0)),
+        max_clip_duration=float(raw_cfg.get("max_clip_duration", 120.0)),
+        enable_scene_detection=bool(raw_cfg.get("enable_scene_detection", True)),
     )
     try:
         job_cfg.validate()
@@ -255,18 +265,23 @@ def execute_job_pipeline_sync(
 
     # --- STAGE 2: Media Download / Ingestion ---
     t2 = time.time()
-    update_stage(2, "running", detail="Ingesting media segment to local workspace...")
+    update_stage(2, "running", detail="Ingesting media or fetching full transcript...")
+    yt_full_transcript = []
     try:
         if kind == "youtube":
-            raw_dl = work_dir / f"{job_id}_raw.mp4"
-            source_file = download_youtube_segment(
-                url=vod_url,
-                output_path=str(raw_dl),
-                start_sec=0.0,
-                duration_sec=12.0,
-                max_filesize_mb=35,
-            )
-            update_stage(2, "completed", detail=f"Segment downloaded ({source_file.stat().st_size} bytes).", elapsed=round(time.time() - t2, 2))
+            yt_full_transcript = fetch_youtube_transcript(vod_url, cache_dir=work_dir)
+            if yt_full_transcript:
+                update_stage(2, "completed", detail=f"Fetched full YouTube transcript ({len(yt_full_transcript)} segments across {dur}s).", elapsed=round(time.time() - t2, 2))
+            else:
+                raw_dl = work_dir / f"{job_id}_raw.mp4"
+                source_file = download_youtube_segment(
+                    url=vod_url,
+                    output_path=str(raw_dl),
+                    start_sec=0.0,
+                    duration_sec=min(float(dur or 300), 120.0),
+                    max_filesize_mb=50,
+                )
+                update_stage(2, "completed", detail=f"Fallback video segment downloaded ({source_file.stat().st_size} bytes).", elapsed=round(time.time() - t2, 2))
         else:
             update_stage(2, "completed", detail=f"Local media loaded: {source_file.name}", elapsed=round(time.time() - t2, 2))
     except Exception as exc:
@@ -275,48 +290,56 @@ def execute_job_pipeline_sync(
 
     # --- STAGE 3: Audio Transcription ---
     t3 = time.time()
-    update_stage(3, "running", detail="Checking speech transcription model weights...")
+    update_stage(3, "running", detail="Resolving speech transcription across video timeline...")
     try:
-        # Check if pre-extracted or test segments were passed in job metadata
-        meta_segments = job.get("metadata", {}).get("transcript_segments")
-        if meta_segments:
-            transcript_segments = [
-                TranscriptSegment(
-                    text=s["text"],
-                    start=float(s["start"]),
-                    end=float(s["end"]),
-                    words=[
-                        Word(text=w["text"], start=float(w["start"]), end=float(w["end"]))
-                        for w in s.get("words", [])
-                    ],
-                )
-                for s in meta_segments
-            ]
+        if yt_full_transcript:
+            transcript_segments = yt_full_transcript
             update_stage(
                 3,
                 "completed",
-                detail=f"Speech transcription loaded ({len(transcript_segments)} segments with verified timestamps).",
-                elapsed=round(time.time() - t3, 2),
-            )
-        elif is_whisper_available():
-            transcriber = Transcriber()
-            transcript_segments = transcriber.transcribe(
-                str(source_file),
-                language=job_cfg.caption_language,
-            )
-            update_stage(
-                3,
-                "completed",
-                detail=f"Whisper transcription completed ({len(transcript_segments)} segments aligned).",
+                detail=f"Full transcript loaded from YouTube ({len(transcript_segments)} segments aligned).",
                 elapsed=round(time.time() - t3, 2),
             )
         else:
-            update_stage(
-                3,
-                "skipped",
-                detail="Whisper transcription model weights not present on host; alignment fallback active.",
-                elapsed=round(time.time() - t3, 2),
-            )
+            meta_segments = job.get("metadata", {}).get("transcript_segments")
+            if meta_segments:
+                transcript_segments = [
+                    TranscriptSegment(
+                        text=s["text"],
+                        start=float(s["start"]),
+                        end=float(s["end"]),
+                        words=[
+                            Word(text=w["text"], start=float(w["start"]), end=float(w["end"]))
+                            for w in s.get("words", [])
+                        ],
+                    )
+                    for s in meta_segments
+                ]
+                update_stage(
+                    3,
+                    "completed",
+                    detail=f"Speech transcription loaded ({len(transcript_segments)} segments with verified timestamps).",
+                    elapsed=round(time.time() - t3, 2),
+                )
+            elif is_whisper_available() and source_file:
+                transcriber = Transcriber()
+                transcript_segments = transcriber.transcribe(
+                    str(source_file),
+                    language=job_cfg.caption_language,
+                )
+                update_stage(
+                    3,
+                    "completed",
+                    detail=f"Whisper transcription completed ({len(transcript_segments)} segments aligned).",
+                    elapsed=round(time.time() - t3, 2),
+                )
+            else:
+                update_stage(
+                    3,
+                    "skipped",
+                    detail="Whisper transcription model weights not present on host; alignment fallback active.",
+                    elapsed=round(time.time() - t3, 2),
+                )
     except Exception as exc:
         update_stage(3, "skipped", detail=f"Transcription fallback applied: {str(exc)}")
     # --- STAGE 4: Signal & Scene Analysis ---
@@ -324,17 +347,20 @@ def execute_job_pipeline_sync(
     update_stage(4, "running", detail="Analyzing acoustic volume and visual scene boundaries...")
     scenes: List[Dict[str, float]] = []
     try:
-        sig_detector = SignalDetector()
-        energy_profile, mean_e = sig_detector.compute_audio_energy_profile(str(source_file))
-        if job_cfg.enable_scene_detection:
-            scene_detector = SceneDetector()
-            scenes = scene_detector.detect_scenes(str(source_file))
-        update_stage(
-            4,
-            "completed",
-            detail=f"Signal analysis: {len(scenes)} visual scene cuts, {len(energy_profile)} acoustic windows (baseline: {mean_e:.1f} RMS).",
-            elapsed=round(time.time() - t4, 2),
-        )
+        if source_file and Path(source_file).exists():
+            sig_detector = SignalDetector()
+            energy_profile, mean_e = sig_detector.compute_audio_energy_profile(str(source_file))
+            if job_cfg.enable_scene_detection:
+                scene_detector = SceneDetector()
+                scenes = scene_detector.detect_scenes(str(source_file))
+            update_stage(
+                4,
+                "completed",
+                detail=f"Signal analysis: {len(scenes)} visual scene cuts, {len(energy_profile)} acoustic windows (baseline: {mean_e:.1f} RMS).",
+                elapsed=round(time.time() - t4, 2),
+            )
+        else:
+            update_stage(4, "skipped", detail="Direct YouTube stream: scene detection deferred to candidate slices.", elapsed=round(time.time() - t4, 2))
     except Exception as exc:
         update_stage(4, "skipped", detail=f"Signal analysis fallback applied: {str(exc)}")
 
@@ -357,7 +383,7 @@ def execute_job_pipeline_sync(
             selection_res_provider = "metadata"
             selection_res_notice = ""
         else:
-            vid_duration = SignalDetector().get_media_duration(str(source_file))
+            vid_duration = float(meta.get("duration") or (SignalDetector().get_media_duration(str(source_file)) if (source_file and Path(source_file).exists()) else 300.0))
             words_json = serialize_words_for_llm(transcript_segments) if transcript_segments else []
             selector = MomentSelector(mode=job_cfg.moment_detection_mode, provider=job_cfg.moment_detection_provider)
             selection_res = selector.select_moments(
@@ -368,9 +394,9 @@ def execute_job_pipeline_sync(
                 min_duration=job_cfg.min_clip_duration,
                 max_duration=job_cfg.max_clip_duration,
                 max_clips=job_cfg.max_clips,
-                media_path=str(source_file),
+                media_path=str(source_file) if source_file else None,
             )
-            scored_candidates = selection_res.candidates
+            scored_candidates = selection_res.candidates[:job_cfg.max_clips]
             selection_res_mode = selection_res.mode
             selection_res_provider = selection_res.provider
             selection_res_notice = selection_res.notice or ""
@@ -406,14 +432,18 @@ def execute_job_pipeline_sync(
         if "metadata" not in job or not isinstance(job["metadata"], dict):
             job["metadata"] = {}
         job["metadata"]["candidates"] = [
-            {
-                "start": c.start,
-                "end": c.end,
+            c.to_dict() if hasattr(c, "to_dict") else {
+                "moment_id": f"mom_{idx:03d}",
+                "rank": idx,
+                "source_start": round(c.start, 2),
+                "source_end": round(c.end, 2),
+                "start": round(c.start, 2),
+                "end": round(c.end, 2),
                 "duration": round(c.duration, 1),
                 "score": round(c.score, 1),
                 "reasons": c.reasons,
             }
-            for c in scored_candidates
+            for idx, c in enumerate(scored_candidates, 1)
         ]
         durations_str = ", ".join([f"{c.duration:.1f}s" for c in scored_candidates])
         detail_msg = f"Ranked {len(scored_candidates)} moments (scores: {', '.join([f'{c.score:.0f}' for c in scored_candidates])}; durations: {durations_str})."
@@ -432,13 +462,34 @@ def execute_job_pipeline_sync(
 
     # --- STAGE 7: Clip Extraction ---
     t7 = time.time()
-    update_stage(7, "running", detail=f"FFmpeg extracting {len(scored_candidates)} slices across timeline...")
+    candidates_to_render = scored_candidates[:job_cfg.max_clips]
+    update_stage(7, "running", detail=f"FFmpeg extracting {len(candidates_to_render)} slices across timeline...")
     try:
         cr = ClipRenderer()
-        for idx, cand in enumerate(scored_candidates, 1):
+        successful_candidates = []
+        for idx, cand in enumerate(candidates_to_render, 1):
             raw_slice = work_dir / f"{job_id}_cand_{idx}_clipped.mp4"
-            cr.render(str(source_file), cand.start, cand.end, str(raw_slice))
-            clip_slices.append(raw_slice)
+            try:
+                if kind == "youtube":
+                    actual_slice = download_youtube_segment(
+                        url=vod_url,
+                        output_path=str(raw_slice),
+                        start_sec=cand.start,
+                        duration_sec=cand.duration,
+                        max_filesize_mb=50,
+                    )
+                else:
+                    actual_slice = Path(cr.render(str(source_file), cand.start, cand.end, str(raw_slice)))
+                clip_slices.append(actual_slice)
+                successful_candidates.append(cand)
+            except Exception as slice_err:
+                logger.warning(f"Slice extraction error for candidate {idx}: {slice_err}")
+                print(f"[Ingest] Slice error for candidate {idx} [{cand.start:.1f}s - {cand.end:.1f}s]: {slice_err}")
+
+        if not clip_slices:
+            raise RuntimeError("Zero candidate slices could be extracted.")
+
+        scored_candidates = successful_candidates
         update_stage(7, "completed", detail=f"Extracted {len(clip_slices)} slices ({', '.join([f'{c.duration:.1f}s' for c in scored_candidates])}, H.264).", elapsed=round(time.time() - t7, 2))
     except Exception as exc:
         update_stage(7, "failed", error=f"FFmpeg clipping error: {str(exc)}")
@@ -450,6 +501,12 @@ def execute_job_pipeline_sync(
     try:
         rf = Reframer()
         for idx, slice_path in enumerate(clip_slices, 1):
+            cand = scored_candidates[idx - 1]
+            clip_scenes = [
+                {"start": max(0.0, s.get("start", 0) - cand.start), "end": max(0.0, s.get("end", 0) - cand.start)}
+                for s in scenes
+                if s.get("end", 0) > cand.start and s.get("start", 0) < cand.end
+            ]
             reframe_out = work_dir / f"{job_id}_cand_{idx}_reframe.mp4"
             rf.render_vertical(
                 str(slice_path),
@@ -457,6 +514,7 @@ def execute_job_pipeline_sync(
                 width=1080,
                 height=1920,
                 framing_mode=job_cfg.framing_mode,
+                scenes=clip_scenes,
             )
             reframe_files.append(reframe_out)
         update_stage(8, "completed", detail=f"Rendered {len(reframe_files)} 9:16 vertical MP4 compositions ({job_cfg.framing_mode}).", elapsed=round(time.time() - t8, 2))
@@ -475,14 +533,35 @@ def execute_job_pipeline_sync(
                 if reframe_path.resolve() != cand_final.resolve():
                     cand_final.write_bytes(reframe_path.read_bytes())
             elif transcript_segments:
-                cr.render(
-                    transcript_segments=transcript_segments,
-                    video_path=str(reframe_path),
-                    output_path=str(cand_final),
-                    config=job_cfg,
-                    clip_start=cand.start,
-                    clip_end=cand.end,
-                )
+                clip_segments = None
+                try:
+                    from services.transcription.service import Transcriber, is_whisper_available
+                    if is_whisper_available():
+                        trans = Transcriber(model_size="base")
+                        slice_trans = trans.transcribe(str(reframe_path), language=job_cfg.caption_language)
+                        if slice_trans and len(slice_trans) > 0:
+                            clip_segments = slice_trans
+                except Exception:
+                    clip_segments = None
+
+                if clip_segments:
+                    cr.render(
+                        transcript_segments=clip_segments,
+                        video_path=str(reframe_path),
+                        output_path=str(cand_final),
+                        config=job_cfg,
+                        clip_start=0.0,
+                        clip_end=cand.duration,
+                    )
+                else:
+                    cr.render(
+                        transcript_segments=transcript_segments,
+                        video_path=str(reframe_path),
+                        output_path=str(cand_final),
+                        config=job_cfg,
+                        clip_start=cand.start,
+                        clip_end=cand.end,
+                    )
             else:
                 if reframe_path.resolve() != cand_final.resolve():
                     cand_final.write_bytes(reframe_path.read_bytes())

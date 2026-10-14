@@ -49,7 +49,7 @@ export default function Dashboard() {
   const [backendOnline, setBackendOnline] = useState(null);
   const [systemDeps, setSystemDeps] = useState(null);
   const [banner, setBanner] = useState(null);
-  const [framingMode, setFramingMode] = useState('center_crop');
+  const [framingMode, setFramingMode] = useState('auto_follow_speaker');
   const [captionPreset, setCaptionPreset] = useState('clean');
   const [captionLanguage, setCaptionLanguage] = useState('auto');
   const [captionSize, setCaptionSize] = useState('medium');
@@ -59,10 +59,10 @@ export default function Dashboard() {
   const [captionWordHighlight, setCaptionWordHighlight] = useState(false);
   const [showAdvancedCaptions, setShowAdvancedCaptions] = useState(false);
   const [momentDetectionMode, setMomentDetectionMode] = useState('heuristic');
-  const [momentDetectionProvider, setMomentDetectionProvider] = useState('gemini');
-  const [maxClips, setMaxClips] = useState(5);
-  const [minClipDuration, setMinClipDuration] = useState(15);
-  const [maxClipDuration, setMaxClipDuration] = useState(60);
+  const [momentDetectionProvider, setMomentDetectionProvider] = useState('heuristic');
+  const [maxClips, setMaxClips] = useState(3);
+  const [minClipDuration, setMinClipDuration] = useState(30);
+  const [maxClipDuration, setMaxClipDuration] = useState(120);
   const [enableSceneDetection, setEnableSceneDetection] = useState(true);
 
   const [jobs, setJobs] = useState([]);
@@ -166,7 +166,7 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vod_url: vodUrl.trim(),
-          framing_mode: framingMode,
+          framing_mode: 'auto_follow_speaker',
           caption_preset: captionPreset,
           caption_language: captionLanguage,
           caption_size: captionSize,
@@ -174,12 +174,12 @@ export default function Dashboard() {
           caption_text_color: captionTextColor,
           caption_highlight_color: captionHighlightColor,
           caption_word_highlight: captionWordHighlight,
-          moment_detection_mode: momentDetectionMode,
-          moment_detection_provider: momentDetectionProvider,
-          max_clips: Number(maxClips),
-          min_clip_duration: Number(minClipDuration),
-          max_clip_duration: Number(maxClipDuration),
-          enable_scene_detection: Boolean(enableSceneDetection),
+          moment_detection_mode: 'heuristic',
+          moment_detection_provider: 'heuristic',
+          max_clips: 3,
+          min_clip_duration: 30,
+          max_clip_duration: 120,
+          enable_scene_detection: true,
         })
       });
       const data = await res.json();
@@ -433,76 +433,24 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Framing Settings */}
-              <div className="space-y-2 pt-2 border-t border-slate-800/80">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-mono uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-                    <Video className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Framing Mode</span>
-                  </label>
-                  <span className="text-[10px] font-mono text-slate-400">Vertical 9:16</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setFramingMode('auto_follow_speaker')}
-                    className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                      framingMode === 'auto_follow_speaker'
-                        ? 'bg-indigo-950/60 border-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="font-semibold text-xs flex items-center justify-between">
-                      <span>Auto — Follow Speaker</span>
-                      {framingMode === 'auto_follow_speaker' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                    </div>
-                    <span className="text-[10px] text-indigo-300/80 mt-1">
-                      Tracking fallback active
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFramingMode('center_crop')}
-                    className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                      framingMode === 'center_crop'
-                        ? 'bg-indigo-950/60 border-indigo-500 text-white shadow-md shadow-indigo-600/20'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="font-semibold text-xs flex items-center justify-between">
-                      <span>Center Crop</span>
-                      {framingMode === 'center_crop' && <Check className="w-3.5 h-3.5 text-indigo-400" />}
-                    </div>
-                    <span className="text-[10px] text-slate-500 mt-1">
-                      Static centered 9:16
-                    </span>
-                  </button>
-
-                  <div
-                    className="p-3 rounded-xl border border-slate-800/50 bg-slate-950/20 text-slate-600 cursor-not-allowed flex flex-col justify-between opacity-60"
-                    title="Manual Position is not implemented yet"
-                  >
-                    <div className="font-semibold text-xs flex items-center justify-between">
-                      <span>Manual Position</span>
-                      <span className="text-[9px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-400 font-mono">N/A</span>
-                    </div>
-                    <span className="text-[10px] text-slate-600 mt-1">
-                      Not available yet
-                    </span>
-                  </div>
-                </div>
-
-                {framingMode === 'auto_follow_speaker' && (
-                  <p className="text-[11px] text-amber-300/90 bg-amber-950/30 border border-amber-900/50 rounded-lg p-2.5 flex items-start space-x-2">
-                    <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      <strong>Notice:</strong> Active speaker detection: unavailable. Fallback: face/person tracking is active with temporal smoothing.
-                    </span>
-                  </p>
-                )}
+              {/* Pipeline Active Config Badges */}
+              <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                <span className="px-2.5 py-1 rounded-lg bg-indigo-950/60 border border-indigo-800/80 text-[11px] font-mono text-indigo-300 flex items-center space-x-1.5">
+                  <Video className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Framing:</span>
+                  <span className="font-semibold text-slate-100">Follow Speaker (9:16)</span>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-amber-950/50 border border-amber-800/80 text-[11px] font-mono text-amber-300 flex items-center space-x-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Detection:</span>
+                  <span className="font-semibold text-slate-100">Automatic Heuristic</span>
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-950/50 border border-emerald-800/80 text-[11px] font-mono text-emerald-300 flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Clips:</span>
+                  <span className="font-semibold text-slate-100">Max 3 (30s – 120s)</span>
+                </span>
               </div>
-
               {/* Caption Settings Panel */}
               <div className="space-y-3 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center justify-between">
@@ -798,112 +746,6 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              {/* 3. Highlight & Moment Detection Panel */}
-              <div className="space-y-3 pt-3 border-t border-slate-800/80">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-mono uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Moment Detection & Multi-Clip Settings</span>
-                  </label>
-                  <span className="text-[10px] font-mono text-slate-400">OpenShorts Architecture</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setMomentDetectionMode('ai')}
-                    className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                      momentDetectionMode === 'ai'
-                        ? 'bg-amber-950/40 border-amber-500 text-white shadow-md shadow-amber-500/20'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="font-semibold text-xs flex items-center justify-between">
-                      <span>AI Semantic Analysis</span>
-                      {momentDetectionMode === 'ai' && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                    </div>
-                    <span className="text-[10px] text-slate-400 mt-1">
-                      LLM prompt moment picker (Gemini / OpenAI / Local)
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setMomentDetectionMode('heuristic')}
-                    className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                      momentDetectionMode === 'heuristic'
-                        ? 'bg-amber-950/40 border-amber-500 text-white shadow-md shadow-amber-500/20'
-                        : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="font-semibold text-xs flex items-center justify-between">
-                      <span>Automatic Heuristic</span>
-                      {momentDetectionMode === 'heuristic' && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                    </div>
-                    <span className="text-[10px] text-slate-400 mt-1">
-                      Scene cuts + acoustic energy & speech density
-                    </span>
-                  </button>
-                </div>
-
-                {momentDetectionMode === 'ai' && (
-                  <p className="text-[11px] text-amber-300/90 bg-amber-950/30 border border-amber-900/50 rounded-lg p-2.5 flex items-start space-x-2">
-                    <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <span>
-                      Requires GEMINI_API_KEY / OPENAI_API_KEY environment variable. If unconfigured, automatically and transparently falls back to heuristic scene and acoustic analysis.
-                    </span>
-                  </p>
-                )}
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">Max Clips</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="15"
-                      value={maxClips}
-                      onChange={(e) => setMaxClips(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">Min Duration (s)</label>
-                    <input
-                      type="number"
-                      min="5"
-                      max="60"
-                      value={minClipDuration}
-                      onChange={(e) => setMinClipDuration(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">Max Duration (s)</label>
-                    <input
-                      type="number"
-                      min="10"
-                      max="120"
-                      value={maxClipDuration}
-                      onChange={(e) => setMaxClipDuration(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
-                    />
-                  </div>
-                  <div className="flex items-center space-x-2 pt-4">
-                    <input
-                      type="checkbox"
-                      id="enableSceneDetection"
-                      checked={enableSceneDetection}
-                      onChange={(e) => setEnableSceneDetection(e.target.checked)}
-                      className="rounded bg-slate-900 border-slate-700 text-amber-500 focus:ring-0"
-                    />
-                    <label htmlFor="enableSceneDetection" className="text-xs text-slate-300 font-medium cursor-pointer">
-                      Scene Cuts
-                    </label>
-                  </div>
-                </div>
-              </div>
-
 
               {/* Submit Button */}
               <div className="flex items-center space-x-3 pt-1">

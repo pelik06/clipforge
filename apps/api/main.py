@@ -113,7 +113,7 @@ def validate_vod_input(url_or_path: str) -> tuple[bool, str, str]:
 
 class JobCreateRequest(BaseModel):
     vod_url: str
-    framing_mode: Optional[str] = "center_crop"
+    framing_mode: Optional[str] = "auto_follow_speaker"
     caption_preset: Optional[str] = "clean"
     caption_language: Optional[str] = "auto"
     caption_size: Optional[str] = "medium"
@@ -122,11 +122,12 @@ class JobCreateRequest(BaseModel):
     caption_highlight_color: Optional[str] = "#FFFF00"
     caption_word_highlight: Optional[bool] = False
     moment_detection_mode: Optional[str] = "heuristic"
-    moment_detection_provider: Optional[str] = "gemini"
-    max_clips: Optional[int] = 5
-    min_clip_duration: Optional[float] = 12.0
-    max_clip_duration: Optional[float] = 60.0
+    moment_detection_provider: Optional[str] = "heuristic"
+    max_clips: Optional[int] = 3
+    min_clip_duration: Optional[float] = 30.0
+    max_clip_duration: Optional[float] = 120.0
     enable_scene_detection: Optional[bool] = True
+    moment_threshold: Optional[float] = 0.45
 
 class DecisionRequest(BaseModel):
     decision: str  # 'approve' or 'reject'
@@ -168,9 +169,19 @@ def system_status():
 
 @app.get("/api/v4/jobs")
 def get_all_jobs(include_fixtures: bool = False):
-    """Return all jobs and clips from persistent storage."""
-    jobs = list_jobs()
-    clips = list_clips()
+    """Return all jobs and clips from persistent storage, filtering out synthetic test runs."""
+    all_jobs = list_jobs()
+    all_clips = list_clips()
+    jobs = [
+        j for j in all_jobs
+        if not str(j.get("id", "")).startswith("job_test_")
+        and "synthetic" not in str(j.get("vod_url", ""))
+        and "dQw4w9WgX" not in str(j.get("vod_url", ""))
+    ]
+    clips = [
+        c for c in all_clips
+        if not str(c.get("job_id", "")).startswith("job_test_")
+    ]
     return {
         "jobs": jobs,
         "clips": clips,
@@ -199,7 +210,7 @@ async def create_job(req: JobCreateRequest, background_tasks: BackgroundTasks):
 
     # Strict configuration validation
     cfg = JobConfig(
-        framing_mode=req.framing_mode or "center_crop",
+        framing_mode=req.framing_mode or "auto_follow_speaker",
         caption_preset=req.caption_preset or "clean",
         caption_language=req.caption_language or "auto",
         caption_size=req.caption_size or "medium",
@@ -208,11 +219,12 @@ async def create_job(req: JobCreateRequest, background_tasks: BackgroundTasks):
         caption_highlight_color=req.caption_highlight_color or "#FFFF00",
         caption_word_highlight=bool(req.caption_word_highlight),
         moment_detection_mode=req.moment_detection_mode or "heuristic",
-        moment_detection_provider=req.moment_detection_provider or "gemini",
-        max_clips=int(req.max_clips or 5),
-        min_clip_duration=float(req.min_clip_duration or 12.0),
-        max_clip_duration=float(req.max_clip_duration or 60.0),
+        moment_detection_provider=req.moment_detection_provider or "heuristic",
+        max_clips=int(req.max_clips or 3),
+        min_clip_duration=float(req.min_clip_duration or 30.0),
+        max_clip_duration=float(req.max_clip_duration or 120.0),
         enable_scene_detection=bool(req.enable_scene_detection if req.enable_scene_detection is not None else True),
+        moment_threshold=float(req.moment_threshold or 0.45),
     )
     try:
         cfg.validate()
