@@ -221,8 +221,8 @@ class ThoughtDetector:
         silences: Optional[List[Tuple[float, float]]] = None,
         total_duration: float = 300.0,
         audio_reactions: Optional[List[Any]] = None,
+        youtube_heatmap: Optional[List[Dict[str, Any]]] = None,
     ) -> float:
-        """Compute holistic full-window quality score evaluating all 9 criteria plus penalties."""
         scenes = scenes or []
         silences = silences or []
         motion_profile = motion_profile or []
@@ -306,7 +306,20 @@ class ThoughtDetector:
                     boost = min(10.0, r_conf * 10.0)
                     score_100 += boost
                     break
-        # PENALTIES
+
+        # YouTube "Most Replayed" Heatmap Boost (up to +15.0 points)
+        if youtube_heatmap:
+            peak_val = 0.0
+            for hm in youtube_heatmap:
+                h_start = float(hm.get("start_time", 0.0))
+                h_end = float(hm.get("end_time", 0.0))
+                h_val = float(hm.get("value", 0.0))
+                if max(t0, h_start) < min(t1, h_end):
+                    if h_val > peak_val:
+                        peak_val = h_val
+            if peak_val > 0.0:
+                boost = min(15.0, peak_val * 15.0)
+                score_100 += boost
         # Incomplete start penalty: e.g. starts with "and", "so", "because", "dan" without setup
         if DANGLING_START_REGEX.search(thought.text):
             score_100 -= 25.0

@@ -48,7 +48,6 @@ def extract_youtube_metadata(url: str) -> Dict[str, Any]:
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "extract_flat": True,
             "skip_download": True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -62,6 +61,7 @@ def extract_youtube_metadata(url: str) -> Dict[str, Any]:
                     "thumbnail": info.get("thumbnail"),
                     "view_count": info.get("view_count"),
                     "webpage_url": info.get("webpage_url") or clean_url,
+                    "heatmap": info.get("heatmap") or [],
                     "source": "yt-dlp",
                 }
     except Exception:

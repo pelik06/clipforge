@@ -400,6 +400,7 @@ def execute_job_pipeline_sync(
                 max_duration=job_cfg.max_clip_duration,
                 max_clips=job_cfg.max_clips,
                 media_path=str(source_file) if source_file else None,
+                youtube_heatmap=meta.get("heatmap") if meta else None,
             )
             scored_candidates = sorted(selection_res.candidates, key=lambda c: getattr(c, "score", 0.0), reverse=True)[:job_cfg.max_clips]
             selection_res_mode = selection_res.mode

@@ -86,6 +86,7 @@ class MomentSelector:
         max_duration: float,
         max_clips: int,
         media_path: Optional[str] = None,
+        youtube_heatmap: Optional[List[Dict[str, Any]]] = None,
     ) -> List[CandidateMoment]:
         """Multi-signal heuristic selection integrating audio energy, motion, face, and speech."""
         eff_min_dur = min(min_duration, max(4.0, video_duration / 4.0)) if video_duration < 45.0 else min_duration
@@ -132,6 +133,7 @@ class MomentSelector:
                             tw,
                             scenes=scenes,
                             total_duration=video_duration,
+                            youtube_heatmap=youtube_heatmap,
                         )
                         reasons = []
                         if tw.has_hook:
@@ -214,8 +216,8 @@ class MomentSelector:
         max_duration: float = 55.0,
         max_clips: int = 5,
         media_path: Optional[str] = None,
+        youtube_heatmap: Optional[List[Dict[str, Any]]] = None,
     ) -> MomentSelectionResult:
-        """Select top 3-15 viral moments, prioritizing AI semantic analysis with heuristic fallback."""
         ai_raw_json = None
         active_mode = "heuristic_fallback"
         notice = None
@@ -298,6 +300,7 @@ Rules:
                 max_duration=max_duration,
                 max_clips=max_clips,
                 media_path=media_path,
+                youtube_heatmap=youtube_heatmap,
             )
             active_mode = "heuristic_fallback"
             notice = "AI semantic provider unavailable or unconfigured. Using acoustic + sentence boundary heuristic fallback."
