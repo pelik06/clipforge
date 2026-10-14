@@ -5,7 +5,7 @@ from services.detection.thought_detector import SentenceWindow
 class ThoughtBoundaryMatcher:
     """Aligns candidate timestamps with underlying sentence thought boundaries."""
 
-    def __init__(self, max_start_expansion: float = 2.0, max_end_expansion: float = 3.0):
+    def __init__(self, max_start_expansion: float = 3.0, max_end_expansion: float = 8.0):
         self.max_start_expansion = max_start_expansion
         self.max_end_expansion = max_end_expansion
 

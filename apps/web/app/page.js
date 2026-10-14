@@ -62,8 +62,9 @@ export default function Dashboard() {
   const [momentDetectionMode, setMomentDetectionMode] = useState('heuristic');
   const [momentDetectionProvider, setMomentDetectionProvider] = useState('heuristic');
   const [maxClips, setMaxClips] = useState(3);
-  const [minClipDuration, setMinClipDuration] = useState(30);
-  const [maxClipDuration, setMaxClipDuration] = useState(120);
+  const [minClipDuration, setMinClipDuration] = useState(45);
+  const [maxClipDuration, setMaxClipDuration] = useState(90);
+  const [targetDurationPreset, setTargetDurationPreset] = useState('medium');
   const [enableSceneDetection, setEnableSceneDetection] = useState(true);
 
   const [jobs, setJobs] = useState([]);
@@ -275,8 +276,8 @@ export default function Dashboard() {
           moment_detection_mode: 'heuristic',
           moment_detection_provider: 'heuristic',
           max_clips: 3,
-          min_clip_duration: 30,
-          max_clip_duration: 120,
+          min_clip_duration: minClipDuration,
+          max_clip_duration: maxClipDuration,
           enable_scene_detection: true,
         })
       });
@@ -578,11 +579,44 @@ export default function Dashboard() {
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-950/50 border border-emerald-800/80 text-[11px] font-mono text-emerald-300 flex items-center space-x-1.5">
                   <Clock className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Clips:</span>
-                  <span className="font-semibold text-slate-100">Max 3 (30s – 120s)</span>
+                  <span className="font-semibold text-slate-100">Max 3 ({minClipDuration}s – {maxClipDuration}s)</span>
                 </span>
               </div>
+
+              {/* Target Duration Preset Selector */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-xs font-mono uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Target Clip Duration (Context & Thought Length)</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { id: 'short', min: 30, max: 60, label: 'Short (30s – 60s)', desc: 'Quick hook / snippet' },
+                    { id: 'medium', min: 45, max: 90, label: 'Medium (45s – 90s)', desc: 'Viral sweet spot & full story' },
+                    { id: 'long', min: 60, max: 150, label: 'Long (60s – 150s)', desc: 'Podcast deep dive / complete topic' }
+                  ].map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => {
+                        setTargetDurationPreset(d.id);
+                        setMinClipDuration(d.min);
+                        setMaxClipDuration(d.max);
+                      }}
+                      className={`p-2.5 rounded-xl border text-left transition ${
+                        targetDurationPreset === d.id
+                          ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-100 shadow-md shadow-emerald-950/40'
+                          : 'bg-slate-900/60 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold">{d.label}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 leading-tight">{d.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Caption Settings Panel */}
-              <div className="space-y-3 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-mono uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
                     <Type className="w-3.5 h-3.5 text-cyan-400" />

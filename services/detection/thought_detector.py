@@ -27,7 +27,10 @@ PAYOFF_ENDERS_REGEX = re.compile(
     r"(?:that's it|just three stories|graduation|ever gotten|thank you|in the world|it changed everything|that is why|itulah kenapa|akhirnya|selesai|berhasil)[.!?]?$",
     re.IGNORECASE,
 )
-
+QUESTION_REGEX = re.compile(
+    r"(?:\?|gimana|kenapa|mengapa|apakah|berapa|kapan|siapa|ngapain|what|why|how|who|where)\b",
+    re.IGNORECASE,
+)
 
 def extract_sentences(
     transcript_segments: List[TranscriptSegment],
@@ -159,13 +162,41 @@ class ThoughtDetector:
                     curr_words.extend(next_s.words)
 
                     dur = curr_end - curr_start
+                    target_optimal_dur = max(self.min_clip_duration, min(65.0, self.max_clip_duration * 0.70))
+
+                    clean_text = next_s.text.strip()
+                    is_question = bool(clean_text.endswith("?") or QUESTION_REGEX.search(clean_text))
+                    has_explicit_payoff = bool(PAYOFF_ENDERS_REGEX.search(clean_text))
+                    has_terminal_punct = bool(re.search(r"[.!]$", clean_text))
+
+                    if is_question:
+                        continue
+
                     if dur >= self.min_clip_duration:
-                        # Check if last sentence has terminal payoff
-                        has_payoff = bool(
-                            re.search(r"[.!?]$", next_s.text.strip())
-                            or PAYOFF_ENDERS_REGEX.search(next_s.text.strip())
-                        )
-                        if has_payoff:
+                        if has_explicit_payoff:
+                            break
+                        if dur >= target_optimal_dur and has_terminal_punct:
+                            break
+                        if pause >= 2.5 and has_terminal_punct:
+                            break
+
+            # If last sentence is a question, extend forward to include the answer
+            if curr_sentences:
+                last_text = curr_sentences[-1].text.strip()
+                if last_text.endswith("?") or QUESTION_REGEX.search(last_text):
+                    for k in range(j, min(n_sent, j + 4)):
+                        ans_s = sentences[k]
+                        if BUMPER_TEXT_REGEX.search(ans_s.text):
+                            break
+                        if (ans_s.end - curr_start) <= self.max_clip_duration:
+                            curr_sentences.append(ans_s)
+                            curr_end = ans_s.end
+                            curr_words.extend(ans_s.words)
+                            dur = curr_end - curr_start
+                            ans_clean = ans_s.text.strip()
+                            if not (ans_clean.endswith("?") or QUESTION_REGEX.search(ans_clean)) and re.search(r"[.!]$", ans_clean):
+                                break
+                        else:
                             break
 
             dur = curr_end - curr_start

@@ -138,8 +138,8 @@ class JobCreateRequest(BaseModel):
     moment_detection_mode: Optional[str] = "heuristic"
     moment_detection_provider: Optional[str] = "heuristic"
     max_clips: Optional[int] = 3
-    min_clip_duration: Optional[float] = 30.0
-    max_clip_duration: Optional[float] = 120.0
+    min_clip_duration: Optional[float] = 45.0
+    max_clip_duration: Optional[float] = 90.0
     enable_scene_detection: Optional[bool] = True
     moment_threshold: Optional[float] = 0.45
 
@@ -258,8 +258,8 @@ async def create_job(req: JobCreateRequest, background_tasks: BackgroundTasks):
         moment_detection_mode=req.moment_detection_mode or "heuristic",
         moment_detection_provider=req.moment_detection_provider or "heuristic",
         max_clips=int(req.max_clips or 3),
-        min_clip_duration=float(req.min_clip_duration or 30.0),
-        max_clip_duration=float(req.max_clip_duration or 120.0),
+        min_clip_duration=float(req.min_clip_duration or 45.0),
+        max_clip_duration=float(req.max_clip_duration or 90.0),
         enable_scene_detection=bool(req.enable_scene_detection if req.enable_scene_detection is not None else True),
         moment_threshold=float(req.moment_threshold or 0.45),
     )

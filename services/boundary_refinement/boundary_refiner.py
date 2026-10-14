@@ -24,8 +24,8 @@ class SmartBoundaryRefiner:
 
     def __init__(
         self,
-        max_start_expansion: float = 2.0,
-        max_end_expansion: float = 3.0,
+        max_start_expansion: float = 3.0,
+        max_end_expansion: float = 8.0,
     ):
         self.max_start_expansion = max_start_expansion
         self.max_end_expansion = max_end_expansion
@@ -93,12 +93,11 @@ class SmartBoundaryRefiner:
                 cur_start = aligned_start
 
             aligned_end = self.pause_analyzer.align_timestamp_to_pause(
-                cur_end, words, is_start=False, max_shift=1.5
+                cur_end, words, is_start=False, max_shift=2.0
             )
             if abs(aligned_end - cur_end) > 0.05:
                 all_reasons.append(f"Snapped end to silence valley ({cur_end:.2f}s -> {aligned_end:.2f}s)")
                 cur_end = aligned_end
-
         # Duration bounds safety clamp
         cur_start = max(0.0, round(cur_start, 2))
         cur_end = round(max(cur_start + min_duration, cur_end), 2)

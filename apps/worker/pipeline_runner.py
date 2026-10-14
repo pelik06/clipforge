@@ -154,8 +154,8 @@ def execute_job_pipeline_sync(
         moment_detection_mode=raw_cfg.get("moment_detection_mode", "heuristic"),
         moment_detection_provider=raw_cfg.get("moment_detection_provider", "heuristic"),
         max_clips=int(raw_cfg.get("max_clips", 3)),
-        min_clip_duration=float(raw_cfg.get("min_clip_duration", 30.0)),
-        max_clip_duration=float(raw_cfg.get("max_clip_duration", 120.0)),
+        min_clip_duration=float(raw_cfg.get("min_clip_duration", 45.0)),
+        max_clip_duration=float(raw_cfg.get("max_clip_duration", 90.0)),
         enable_scene_detection=bool(raw_cfg.get("enable_scene_detection", True)),
     )
     try:
