@@ -617,6 +617,7 @@ export default function Dashboard() {
               </div>
 
               {/* Caption Settings Panel */}
+              <div className="space-y-3 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-mono uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
                     <Type className="w-3.5 h-3.5 text-cyan-400" />
