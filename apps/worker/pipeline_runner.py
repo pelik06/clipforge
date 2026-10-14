@@ -380,6 +380,7 @@ def execute_job_pipeline_sync(
                 )
                 for c in meta_candidates
             ]
+            scored_candidates.sort(key=lambda c: getattr(c, "score", 0.0), reverse=True)
             selection_res_mode = "configured"
             selection_res_provider = "metadata"
             selection_res_notice = ""
@@ -397,8 +398,7 @@ def execute_job_pipeline_sync(
                 max_clips=job_cfg.max_clips,
                 media_path=str(source_file) if source_file else None,
             )
-            scored_candidates = selection_res.candidates[:job_cfg.max_clips]
-            selection_res_mode = selection_res.mode
+            scored_candidates = sorted(selection_res.candidates, key=lambda c: getattr(c, "score", 0.0), reverse=True)[:job_cfg.max_clips]
             selection_res_provider = selection_res.provider
             selection_res_notice = selection_res.notice or ""
         if not scored_candidates:
@@ -463,7 +463,7 @@ def execute_job_pipeline_sync(
 
     # --- STAGE 7: Clip Extraction ---
     t7 = time.time()
-    candidates_to_render = scored_candidates[:job_cfg.max_clips]
+    candidates_to_render = sorted(scored_candidates, key=lambda c: getattr(c, "score", 0.0), reverse=True)[:job_cfg.max_clips]
     update_stage(7, "running", detail=f"FFmpeg extracting {len(candidates_to_render)} slices across timeline...")
     try:
         from services.boundary_refinement import SmartBoundaryRefiner

@@ -429,23 +429,28 @@ class Reframer:
 
         # Temporal Smoothing with Scene-Cut Instant Snap
         smoothed_trajectory: List[TrajectoryPoint] = []
-        alpha = self.settings.reframe_smoothing
+        base_alpha = max(0.45, self.settings.reframe_smoothing)
         smoothed_x = default_center_x if not raw_points else raw_points[0][3]
-        jump_confirm_count = 0
 
         for i, (ts, tcx, tcy, cx, cy, is_cut) in enumerate(raw_points):
             if is_cut and self.settings.scene_cut_snap:
                 smoothed_x = cx
-                jump_confirm_count = 0
             else:
-                target_shift = smoothed_x if abs(cx - smoothed_x) < 25.0 else cx
-                if abs(target_shift - smoothed_x) > 180.0:
-                    jump_confirm_count += 1
-                    if jump_confirm_count < 3:
-                        target_shift = smoothed_x
+                diff = abs(cx - smoothed_x)
+                if diff < 20.0:
+                    # Deadband: minor head-bob micro-jitter held steady
+                    target_shift = smoothed_x
+                    step_alpha = base_alpha
+                elif diff > 100.0:
+                    # Speaker switch: snappy responsive pan in 1-2 frames (~0.25-0.35s)
+                    target_shift = cx
+                    step_alpha = 0.78
                 else:
-                    jump_confirm_count = 0
-                smoothed_x = alpha * target_shift + (1.0 - alpha) * smoothed_x
+                    # Moderate head/body movement
+                    target_shift = cx
+                    step_alpha = max(base_alpha, 0.55)
+
+                smoothed_x = step_alpha * target_shift + (1.0 - step_alpha) * smoothed_x
 
             final_crop_x = max(0.0, min(max_crop_x, smoothed_x))
             smoothed_trajectory.append(
