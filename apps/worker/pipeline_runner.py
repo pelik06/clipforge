@@ -368,6 +368,9 @@ def execute_job_pipeline_sync(
     # --- STAGE 5: Candidate Detection ---
     t5 = time.time()
     update_stage(5, "running", detail="Selecting viral moments via transcript and scene analysis...")
+    selection_res_mode = "heuristic"
+    selection_res_provider = "heuristic"
+    selection_res_notice = ""
     try:
         meta_candidates = job.get("metadata", {}).get("candidates")
         if meta_candidates is not None:
@@ -399,6 +402,7 @@ def execute_job_pipeline_sync(
                 media_path=str(source_file) if source_file else None,
             )
             scored_candidates = sorted(selection_res.candidates, key=lambda c: getattr(c, "score", 0.0), reverse=True)[:job_cfg.max_clips]
+            selection_res_mode = selection_res.mode
             selection_res_provider = selection_res.provider
             selection_res_notice = selection_res.notice or ""
         if not scored_candidates:
