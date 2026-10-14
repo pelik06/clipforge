@@ -4,20 +4,28 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 import datetime
 
+import os
+
+def get_default_db_path() -> Path:
+    data_dir = os.getenv("CLIPFORGE_DATA_DIR", "./data")
+    return Path(data_dir) / "clipforge.db"
+
 DEFAULT_DB_PATH = Path("data/clipforge.db")
 
 
 def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    target = db_path or DEFAULT_DB_PATH
+    target = db_path or get_default_db_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(target), timeout=15.0)
+    conn = sqlite3.connect(str(target), timeout=30.0)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA busy_timeout=15000;")
     return conn
 
 
 def init_db(db_path: Optional[Path] = None) -> None:
     with get_connection(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS jobs (
@@ -60,6 +68,56 @@ def init_db(db_path: Optional[Path] = None) -> None:
             CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_clips_created ON clips(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_clips_job ON clips(job_id);
+
+            CREATE TABLE IF NOT EXISTS render_jobs (
+                id TEXT PRIMARY KEY,
+                clip_id TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                progress REAL NOT NULL DEFAULT 0.0,
+                preset TEXT NOT NULL DEFAULT 'tiktok',
+                render_type TEXT NOT NULL DEFAULT 'final',
+                output_path TEXT,
+                output_sha256 TEXT,
+                error_message TEXT,
+                retry_count INTEGER NOT NULL DEFAULT 0,
+                priority INTEGER NOT NULL DEFAULT 10,
+                config_json TEXT DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_render_jobs_status ON render_jobs(status);
+            CREATE INDEX IF NOT EXISTS idx_render_jobs_created ON render_jobs(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS editor_states (
+                clip_id TEXT PRIMARY KEY,
+                editor_version INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL DEFAULT 'DRAFT',
+                state_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_editor_states_updated ON editor_states(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS exports (
+                id TEXT PRIMARY KEY,
+                clip_id TEXT NOT NULL,
+                editor_version INTEGER NOT NULL,
+                render_job_id TEXT,
+                preset TEXT NOT NULL,
+                render_type TEXT NOT NULL,
+                output_path TEXT NOT NULL,
+                output_sha256 TEXT,
+                file_size INTEGER DEFAULT 0,
+                duration REAL DEFAULT 0.0,
+                resolution TEXT DEFAULT '1080x1920',
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'EXPORTED'
+            );
+            CREATE INDEX IF NOT EXISTS idx_exports_clip ON exports(clip_id);
+            CREATE INDEX IF NOT EXISTS idx_exports_created ON exports(created_at DESC);
             """
         )
         cursor = conn.cursor()
@@ -84,6 +142,38 @@ def init_db(db_path: Optional[Path] = None) -> None:
         for col_name, col_def in column_defs.items():
             if col_name not in existing_cols:
                 conn.execute(f"ALTER TABLE jobs ADD COLUMN {col_name} {col_def}")
+
+        cursor.execute("PRAGMA table_info(clips)")
+        existing_clip_cols = {r["name"] for r in cursor.fetchall()}
+        clip_column_defs = {
+            "speaker_track_id": "TEXT DEFAULT NULL",
+            "speaker_confidence": "REAL DEFAULT 0.0",
+            "layout_mode": "TEXT DEFAULT 'TRACK'",
+            "audio_reaction": "TEXT DEFAULT NULL",
+            "audio_reaction_confidence": "REAL DEFAULT 0.0",
+            "variant": "TEXT DEFAULT 'normal'",
+            "parent_moment_id": "TEXT DEFAULT NULL",
+            "ranking": "INTEGER DEFAULT NULL",
+            "is_recommended": "INTEGER DEFAULT 0",
+            "quality_breakdown": "TEXT DEFAULT '{}'",
+            "why_this_clip": "TEXT DEFAULT '[]'",
+            "recommendation_reasons": "TEXT DEFAULT '[]'",
+            "context_score": "REAL DEFAULT NULL",
+            "bridge_score": "REAL DEFAULT NULL",
+            "hook_type": "TEXT DEFAULT NULL",
+            "payoff_type": "TEXT DEFAULT NULL",
+            "context_completeness": "REAL DEFAULT NULL",
+            "topic_family": "TEXT DEFAULT NULL",
+            "topic_label": "TEXT DEFAULT NULL",
+            "visual_quality_score": "REAL DEFAULT NULL",
+            "headroom_score": "REAL DEFAULT NULL",
+            "face_size_score": "REAL DEFAULT NULL",
+            "boundary_adjustment": "TEXT DEFAULT '{}'",
+            "quality_flags": "TEXT DEFAULT '[]'",
+        }
+        for col_name, col_def in clip_column_defs.items():
+            if col_name not in existing_clip_cols:
+                conn.execute(f"ALTER TABLE clips ADD COLUMN {col_name} {col_def}")
         conn.commit()
 
 
@@ -187,15 +277,43 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
             INSERT INTO clips (
                 id, job_id, title, duration, score, status, vod,
                 is_fixture, is_real_media, media_type, render_status, render_notice,
-                media_url, start_time, end_time, resolution, qc_json, created_at, reviewed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                media_url, start_time, end_time, resolution, qc_json, created_at, reviewed_at,
+                speaker_track_id, speaker_confidence, layout_mode, audio_reaction, audio_reaction_confidence,
+                variant, parent_moment_id, ranking, is_recommended, quality_breakdown, why_this_clip, recommendation_reasons,
+                context_score, bridge_score, hook_type, payoff_type, context_completeness, topic_family, topic_label,
+                visual_quality_score, headroom_score, face_size_score, boundary_adjustment, quality_flags
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 reviewed_at = excluded.reviewed_at,
                 render_status = excluded.render_status,
                 render_notice = excluded.render_notice,
                 media_url = excluded.media_url,
-                qc_json = excluded.qc_json;
+                qc_json = excluded.qc_json,
+                speaker_track_id = COALESCE(excluded.speaker_track_id, clips.speaker_track_id),
+                speaker_confidence = COALESCE(excluded.speaker_confidence, clips.speaker_confidence),
+                layout_mode = COALESCE(excluded.layout_mode, clips.layout_mode),
+                audio_reaction = COALESCE(excluded.audio_reaction, clips.audio_reaction),
+                audio_reaction_confidence = COALESCE(excluded.audio_reaction_confidence, clips.audio_reaction_confidence),
+                variant = COALESCE(excluded.variant, clips.variant),
+                parent_moment_id = COALESCE(excluded.parent_moment_id, clips.parent_moment_id),
+                ranking = COALESCE(excluded.ranking, clips.ranking),
+                is_recommended = COALESCE(excluded.is_recommended, clips.is_recommended),
+                quality_breakdown = COALESCE(excluded.quality_breakdown, clips.quality_breakdown),
+                why_this_clip = COALESCE(excluded.why_this_clip, clips.why_this_clip),
+                recommendation_reasons = COALESCE(excluded.recommendation_reasons, clips.recommendation_reasons),
+                context_score = COALESCE(excluded.context_score, clips.context_score),
+                bridge_score = COALESCE(excluded.bridge_score, clips.bridge_score),
+                hook_type = COALESCE(excluded.hook_type, clips.hook_type),
+                payoff_type = COALESCE(excluded.payoff_type, clips.payoff_type),
+                context_completeness = COALESCE(excluded.context_completeness, clips.context_completeness),
+                topic_family = COALESCE(excluded.topic_family, clips.topic_family),
+                topic_label = COALESCE(excluded.topic_label, clips.topic_label),
+                visual_quality_score = COALESCE(excluded.visual_quality_score, clips.visual_quality_score),
+                headroom_score = COALESCE(excluded.headroom_score, clips.headroom_score),
+                face_size_score = COALESCE(excluded.face_size_score, clips.face_size_score),
+                boundary_adjustment = COALESCE(excluded.boundary_adjustment, clips.boundary_adjustment),
+                quality_flags = COALESCE(excluded.quality_flags, clips.quality_flags);
             """,
             (
                 clip["id"],
@@ -217,6 +335,30 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 qc_str,
                 clip.get("created_at", now),
                 clip.get("reviewed_at"),
+                clip.get("speaker_track_id"),
+                float(clip.get("speaker_confidence") or 0.0),
+                clip.get("layout_mode", "TRACK"),
+                clip.get("audio_reaction"),
+                float(clip.get("audio_reaction_confidence") or 0.0),
+                clip.get("variant", "normal"),
+                clip.get("parent_moment_id"),
+                clip.get("ranking"),
+                1 if clip.get("is_recommended") else 0,
+                json.dumps(clip.get("quality_breakdown", {})),
+                json.dumps(clip.get("why_this_clip", [])),
+                json.dumps(clip.get("recommendation_reasons", [])),
+                clip.get("context_score"),
+                clip.get("bridge_score"),
+                clip.get("hook_type"),
+                clip.get("payoff_type"),
+                clip.get("context_completeness"),
+                clip.get("topic_family"),
+                clip.get("topic_label"),
+                clip.get("visual_quality_score"),
+                clip.get("headroom_score"),
+                clip.get("face_size_score"),
+                json.dumps(clip.get("boundary_adjustment", {})),
+                json.dumps(clip.get("quality_flags", [])),
             ),
         )
         conn.commit()
@@ -247,7 +389,244 @@ def list_clips(job_id: Optional[str] = None, db_path: Optional[Path] = None) -> 
             rows = conn.execute("SELECT * FROM clips ORDER BY created_at DESC").fetchall()
         return [_format_clip_row(r) for r in rows]
 
+def save_render_job(job: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    init_db(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    cfg_str = json.dumps(job.get("config", {}))
 
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO render_jobs (
+                id, clip_id, source_id, status, stage, progress,
+                preset, render_type, output_path, output_sha256, error_message,
+                retry_count, priority, config_json, created_at, started_at, completed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                stage = excluded.stage,
+                progress = excluded.progress,
+                output_path = excluded.output_path,
+                output_sha256 = excluded.output_sha256,
+                error_message = excluded.error_message,
+                retry_count = excluded.retry_count,
+                started_at = excluded.started_at,
+                completed_at = excluded.completed_at;
+            """,
+            (
+                job["id"],
+                job["clip_id"],
+                job.get("source_id", ""),
+                job.get("status", "QUEUED"),
+                job.get("stage", "Queued"),
+                float(job.get("progress", 0.0)),
+                job.get("preset", "tiktok"),
+                job.get("render_type", "final"),
+                job.get("output_path"),
+                job.get("output_sha256"),
+                job.get("error_message"),
+                int(job.get("retry_count", 0)),
+                int(job.get("priority", 10)),
+                cfg_str,
+                job.get("created_at", now),
+                job.get("started_at"),
+                job.get("completed_at"),
+            ),
+        )
+        conn.commit()
+    return job
+
+
+def get_render_job(job_id: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM render_jobs WHERE id = ?", (job_id,)).fetchone()
+        if not row:
+            return None
+        return _format_render_job_row(row)
+
+
+def list_render_jobs(status: Optional[str] = None, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        if status:
+            rows = conn.execute("SELECT * FROM render_jobs WHERE status = ? ORDER BY priority DESC, created_at ASC", (status,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM render_jobs ORDER BY created_at DESC").fetchall()
+        return [_format_render_job_row(r) for r in rows]
+
+
+def delete_render_job(job_id: str, db_path: Optional[Path] = None) -> bool:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM render_jobs WHERE id = ?", (job_id,))
+        conn.commit()
+    return True
+
+
+def _format_render_job_row(row: sqlite3.Row) -> Dict[str, Any]:
+    cfg = {}
+    try:
+        cfg = json.loads(row["config_json"]) if row["config_json"] else {}
+    except Exception:
+        pass
+    return {
+        "id": row["id"],
+        "clip_id": row["clip_id"],
+        "source_id": row["source_id"],
+        "status": row["status"],
+        "stage": row["stage"],
+        "progress": float(row["progress"]),
+        "preset": row["preset"],
+        "render_type": row["render_type"],
+        "output_path": row["output_path"],
+        "output_sha256": row["output_sha256"],
+        "error_message": row["error_message"],
+        "retry_count": int(row["retry_count"]),
+        "priority": int(row["priority"]),
+        "config": cfg,
+        "created_at": row["created_at"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+    }
+
+
+def save_editor_state(record: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    init_db(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    state_json = json.dumps(record["state_json"]) if isinstance(record["state_json"], dict) else str(record["state_json"])
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO editor_states (
+                clip_id, editor_version, status, state_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(clip_id) DO UPDATE SET
+                editor_version = excluded.editor_version,
+                status = excluded.status,
+                state_json = excluded.state_json,
+                updated_at = excluded.updated_at;
+            """,
+            (
+                record["clip_id"],
+                int(record.get("editor_version", 1)),
+                str(record.get("status", "DRAFT")),
+                state_json,
+                record.get("created_at", now),
+                record.get("updated_at", now),
+            ),
+        )
+        conn.commit()
+    return record
+
+
+def get_editor_state(clip_id: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM editor_states WHERE clip_id = ?", (clip_id,)).fetchone()
+        if not row:
+            return None
+        st_json = json.loads(row["state_json"]) if row["state_json"] else {}
+        return {
+            "clip_id": row["clip_id"],
+            "editor_version": int(row["editor_version"]),
+            "status": row["status"],
+            "state_json": st_json,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+
+def save_export_artifact(export_dict: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str, Any]:
+    init_db(db_path)
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO exports (
+                id, clip_id, editor_version, render_job_id, preset, render_type,
+                output_path, output_sha256, file_size, duration, resolution, created_at, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                editor_version = excluded.editor_version,
+                render_job_id = excluded.render_job_id,
+                preset = excluded.preset,
+                render_type = excluded.render_type,
+                output_path = excluded.output_path,
+                output_sha256 = excluded.output_sha256,
+                file_size = excluded.file_size,
+                duration = excluded.duration,
+                resolution = excluded.resolution,
+                status = excluded.status;
+            """,
+            (
+                export_dict["id"],
+                export_dict["clip_id"],
+                int(export_dict.get("editor_version", 1)),
+                export_dict.get("render_job_id"),
+                export_dict.get("preset", "tiktok"),
+                export_dict.get("render_type", "final"),
+                export_dict["output_path"],
+                export_dict.get("output_sha256"),
+                int(export_dict.get("file_size", 0)),
+                float(export_dict.get("duration", 0.0)),
+                export_dict.get("resolution", "1080x1920"),
+                export_dict.get("created_at", now),
+                export_dict.get("status", "EXPORTED"),
+            ),
+        )
+        conn.commit()
+    return export_dict
+
+
+def list_export_artifacts(clip_id: Optional[str] = None, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        if clip_id:
+            rows = conn.execute("SELECT * FROM exports WHERE clip_id = ? ORDER BY created_at DESC", (clip_id,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM exports ORDER BY created_at DESC").fetchall()
+
+        editor_versions = {
+            r["clip_id"]: int(r["editor_version"])
+            for r in conn.execute("SELECT clip_id, editor_version FROM editor_states").fetchall()
+        }
+
+        results = []
+        for r in rows:
+            c_id = r["clip_id"]
+            exp_ver = int(r["editor_version"])
+            curr_ver = editor_versions.get(c_id, exp_ver)
+            is_stale = curr_ver > exp_ver
+
+            results.append({
+                "id": r["id"],
+                "clip_id": c_id,
+                "editor_version": exp_ver,
+                "current_editor_version": curr_ver,
+                "is_stale": is_stale,
+                "stale_reason": f"Outdated export (rendered from v{exp_ver}, current state is v{curr_ver})" if is_stale else None,
+                "render_job_id": r["render_job_id"],
+                "preset": r["preset"],
+                "render_type": r["render_type"],
+                "output_path": r["output_path"],
+                "output_sha256": r["output_sha256"],
+                "file_size": int(r["file_size"]),
+                "duration": float(r["duration"]),
+                "resolution": r["resolution"],
+                "created_at": r["created_at"],
+                "status": "OUTDATED" if is_stale else r["status"],
+            })
+        return results
+
+
+def delete_export_artifact(export_id: str, db_path: Optional[Path] = None) -> bool:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM exports WHERE id = ?", (export_id,))
+        conn.commit()
+    return True
 def _format_job_row(row: sqlite3.Row) -> Dict[str, Any]:
     stages = []
     try:
@@ -319,4 +698,28 @@ def _format_clip_row(row: sqlite3.Row) -> Dict[str, Any]:
         "qc_checks": qc_checks,
         "created_at": row["created_at"],
         "reviewed_at": row["reviewed_at"],
+        "speaker_track_id": row["speaker_track_id"] if "speaker_track_id" in row.keys() else None,
+        "speaker_confidence": float(row["speaker_confidence"] or 0.0) if "speaker_confidence" in row.keys() else 0.0,
+        "layout_mode": row["layout_mode"] if "layout_mode" in row.keys() and row["layout_mode"] else "TRACK",
+        "audio_reaction": row["audio_reaction"] if "audio_reaction" in row.keys() else None,
+        "audio_reaction_confidence": float(row["audio_reaction_confidence"] or 0.0) if "audio_reaction_confidence" in row.keys() else 0.0,
+        "variant": row["variant"] if "variant" in row.keys() and row["variant"] else "normal",
+        "parent_moment_id": row["parent_moment_id"] if "parent_moment_id" in row.keys() else None,
+        "ranking": row["ranking"] if "ranking" in row.keys() else None,
+        "is_recommended": bool(row["is_recommended"]) if "is_recommended" in row.keys() and row["is_recommended"] is not None else False,
+        "quality_breakdown": json.loads(row["quality_breakdown"]) if "quality_breakdown" in row.keys() and row["quality_breakdown"] else {},
+        "why_this_clip": json.loads(row["why_this_clip"]) if "why_this_clip" in row.keys() and row["why_this_clip"] else [],
+        "recommendation_reasons": json.loads(row["recommendation_reasons"]) if "recommendation_reasons" in row.keys() and row["recommendation_reasons"] else [],
+        "context_score": float(row["context_score"]) if "context_score" in row.keys() and row["context_score"] is not None else None,
+        "bridge_score": float(row["bridge_score"]) if "bridge_score" in row.keys() and row["bridge_score"] is not None else None,
+        "hook_type": row["hook_type"] if "hook_type" in row.keys() else None,
+        "payoff_type": row["payoff_type"] if "payoff_type" in row.keys() else None,
+        "context_completeness": float(row["context_completeness"]) if "context_completeness" in row.keys() and row["context_completeness"] is not None else None,
+        "topic_family": row["topic_family"] if "topic_family" in row.keys() else None,
+        "topic_label": row["topic_label"] if "topic_label" in row.keys() else None,
+        "visual_quality_score": float(row["visual_quality_score"]) if "visual_quality_score" in row.keys() and row["visual_quality_score"] is not None else None,
+        "headroom_score": float(row["headroom_score"]) if "headroom_score" in row.keys() and row["headroom_score"] is not None else None,
+        "face_size_score": float(row["face_size_score"]) if "face_size_score" in row.keys() and row["face_size_score"] is not None else None,
+        "boundary_adjustment": json.loads(row["boundary_adjustment"]) if "boundary_adjustment" in row.keys() and row["boundary_adjustment"] else {},
+        "quality_flags": json.loads(row["quality_flags"]) if "quality_flags" in row.keys() and row["quality_flags"] else [],
     }

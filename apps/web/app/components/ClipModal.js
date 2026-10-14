@@ -18,7 +18,15 @@ import {
   Layers,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  RotateCcw,
+  RotateCw,
+  Volume2,
+  VolumeX,
+  Crop,
+  Video,
+  Save,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function ClipModal({
@@ -41,6 +49,30 @@ export default function ClipModal({
   // In/Out Trimming bounds
   const [trimStart, setTrimStart] = useState(clip.start_time !== undefined ? clip.start_time : 0.0);
   const [trimEnd, setTrimEnd] = useState(clip.end_time !== undefined ? clip.end_time : totalDuration);
+
+  // P5 Editor State & Versioning
+  const [editorVersion, setEditorVersion] = useState(1);
+  const [editorStatus, setEditorStatus] = useState('DRAFT');
+  const [autosaveStatus, setAutosaveStatus] = useState('Saved v1');
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+
+  // P5 Audio State
+  const [volume, setVolume] = useState(1.0);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // P5 Manual Crop & Layout Override
+  const [cropMode, setCropMode] = useState('auto'); // 'auto' | 'manual'
+  const [cropX, setCropX] = useState(0.0);
+  const [cropY, setCropY] = useState(0.0);
+  const [cropScale, setCropScale] = useState(1.0);
+  const [layoutMode, setLayoutMode] = useState(clip.layout_mode || 'AUTO');
+
+  // P5 Preview & Render Status
+  const [isRenderingPreview, setIsRenderingPreview] = useState(false);
+  const [isRenderingFinal, setIsRenderingFinal] = useState(false);
+  const [activeRenderJobId, setActiveRenderJobId] = useState(null);
+  const [videoSrc, setVideoSrc] = useState(clip.media_url);
 
   // CapCut-style Subtitle Layer Chunks
   const [captions, setCaptions] = useState([
@@ -93,6 +125,161 @@ export default function ClipModal({
   const isRejected = clip.status === 'REJECTED';
   const isWaiting = !isApproved && !isRejected;
   const isLoading = actionLoading[clip.id];
+
+  // Snapshot generator for undo/redo
+  const getSnapshot = () => ({
+    trimStart,
+    trimEnd,
+    captions: JSON.parse(JSON.stringify(captions)),
+    cropMode,
+    cropX,
+    cropY,
+    cropScale,
+    layoutMode,
+    volume,
+    isMuted,
+  });
+
+  const pushUndo = () => {
+    setUndoStack((prev) => [...prev.slice(-30), getSnapshot()]);
+    setRedoStack([]);
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, -1));
+    setRedoStack((s) => [...s, getSnapshot()]);
+
+    setTrimStart(prev.trimStart);
+    setTrimEnd(prev.trimEnd);
+    setCaptions(prev.captions);
+    setCropMode(prev.cropMode);
+    setCropX(prev.cropX);
+    setCropY(prev.cropY);
+    setCropScale(prev.cropScale);
+    setLayoutMode(prev.layoutMode);
+    setVolume(prev.volume);
+    setIsMuted(prev.isMuted);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((s) => s.slice(0, -1));
+    setUndoStack((s) => [...s, getSnapshot()]);
+
+    setTrimStart(next.trimStart);
+    setTrimEnd(next.trimEnd);
+    setCaptions(next.captions);
+    setCropMode(next.cropMode);
+    setCropX(next.cropX);
+    setCropY(next.cropY);
+    setCropScale(next.cropScale);
+    setLayoutMode(next.layoutMode);
+    setVolume(next.volume);
+    setIsMuted(next.isMuted);
+  };
+
+  // Load editor state from backend on mount
+  useEffect(() => {
+    if (!clip?.id) return;
+    const fetchState = async () => {
+      try {
+        const res = await fetch(`/api/v4/editor/${clip.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.state) {
+            const st = data.state;
+            setEditorVersion(st.editor_version || 1);
+            setEditorStatus(st.status || 'DRAFT');
+            setAutosaveStatus(`Saved v${st.editor_version || 1}`);
+            if (st.source_start !== undefined) setTrimStart(st.source_start);
+            if (st.source_end !== undefined) setTrimEnd(st.source_end);
+            if (st.captions && st.captions.length > 0) setCaptions(st.captions);
+            if (st.crop) {
+              setCropMode(st.crop.mode || 'auto');
+              setCropX(st.crop.x || 0.0);
+              setCropY(st.crop.y || 0.0);
+              setCropScale(st.crop.scale || 1.0);
+            }
+            if (st.layout) setLayoutMode(st.layout);
+            if (st.audio) {
+              setVolume(st.audio.volume !== undefined ? st.audio.volume : 1.0);
+              setIsMuted(Boolean(st.audio.mute));
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    fetchState();
+  }, [clip.id]);
+
+  // Debounced Autosave to backend
+  const triggerAutosave = async () => {
+    setAutosaveStatus('Saving...');
+    try {
+      const payload = {
+        clip_id: clip.id,
+        source_id: clip.media_url || clip.vod || 'data/input/real_talk_35s.mp4',
+        source_start: trimStart,
+        source_end: trimEnd,
+        crop: { x: cropX, y: cropY, width: 1.0, height: 1.0, scale: cropScale, mode: cropMode },
+        layout: layoutMode,
+        captions: captions,
+        audio: { volume: isMuted ? 0.0 : volume, mute: isMuted },
+        editor_version: editorVersion + 1,
+        status: editorStatus,
+      };
+      const res = await fetch(`/api/v4/editor/${clip.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEditorVersion(data.state?.editor_version || editorVersion + 1);
+        setAutosaveStatus(`Saved v${data.state?.editor_version || editorVersion + 1}`);
+      }
+    } catch (e) {
+      setAutosaveStatus('Save failed');
+    }
+  };
+
+  const handleRenderPreview = async () => {
+    setIsRenderingPreview(true);
+    await triggerAutosave();
+    try {
+      const res = await fetch(`/api/v4/editor/${clip.id}/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: 'preview' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveRenderJobId(data.job?.id);
+      }
+    } catch (e) {} finally {
+      setIsRenderingPreview(false);
+    }
+  };
+
+  const handleRenderFinal = async () => {
+    setIsRenderingFinal(true);
+    await triggerAutosave();
+    try {
+      const res = await fetch(`/api/v4/editor/${clip.id}/render`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: exportPlatform || 'tiktok' }),
+      });
+      if (res.ok) {
+        setExportDone(true);
+      }
+    } catch (e) {} finally {
+      setIsRenderingFinal(false);
+    }
+  };
 
   // Selected caption chunk
   const activeCaption = captions.find((c) => c.id === selectedCaptionId) || captions[0];
@@ -269,6 +456,32 @@ export default function ClipModal({
           </div>
 
           <div className="flex items-center gap-3">
+            {/* P5 Undo / Redo & Autosave */}
+            <div className="flex items-center gap-1 bg-[#141722] p-0.5 rounded border border-[#2b3140]">
+              <button
+                type="button"
+                onClick={handleUndo}
+                disabled={undoStack.length === 0}
+                title="Undo (Ctrl+Z)"
+                className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleRedo}
+                disabled={redoStack.length === 0}
+                title="Redo (Ctrl+Y)"
+                className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition-colors"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded">
+              {autosaveStatus}
+            </span>
+
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#1a1e2a] text-slate-300 border border-[#2b3140] tabular-nums">
               Score: {clip.score || '90/100'}
             </span>
@@ -321,6 +534,116 @@ export default function ClipModal({
                       <Play className="w-5 h-5 ml-0.5" aria-hidden="true" />
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* TAB: REFRAME & CROP (P5.7 & P5.8) */}
+              {activeInspectorTab === 'reframe' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Framing Override Mode</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Auto (AI Smart Face)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Manual Position
+                      </button>
+                    </div>
+                  </div>
+
+                  {cropMode === 'manual' && (
+                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Horizontal Crop X:</span>
+                          <span className="font-mono text-white">{Math.round(cropX * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.0"
+                          max="1.0"
+                          step="0.02"
+                          value={cropX}
+                          onChange={(e) => setCropX(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Crop Scale:</span>
+                          <span className="font-mono text-white">{cropScale.toFixed(2)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="1.8"
+                          step="0.05"
+                          value={cropScale}
+                          onChange={(e) => setCropScale(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Multi-Speaker Layout</label>
+                    <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+                      {['AUTO', 'TRACK', 'SPLIT'].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: AUDIO CONTROLS (P5.9) */}
+              {activeInspectorTab === 'audio' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Volume Gain:</span>
+                      <span className="font-mono text-white">{Math.round(volume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="2.0"
+                      step="0.05"
+                      value={volume}
+                      disabled={isMuted}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      onMouseUp={triggerAutosave}
+                      className="w-full accent-emerald-400"
+                    />
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={isMuted}
+                      onChange={(e) => { setIsMuted(e.target.checked); triggerAutosave(); }}
+                      className="rounded bg-slate-900 border-slate-700 text-rose-500"
+                    />
+                    <span className="text-slate-300 font-medium">Mute Clip Audio</span>
+                  </label>
                 </div>
               )}
 
@@ -390,6 +713,32 @@ export default function ClipModal({
                 >
                   <Sliders className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
                   <span>Caption Style</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveInspectorTab('reframe')}
+                  className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                    activeInspectorTab === 'reframe'
+                      ? 'bg-[#222631] text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Crop className="w-3.5 h-3.5 text-purple-400" aria-hidden="true" />
+                  <span>Crop/Layout</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveInspectorTab('audio')}
+                  className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                    activeInspectorTab === 'audio'
+                      ? 'bg-[#222631] text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
+                  <span>Audio</span>
                 </button>
 
                 <button
@@ -487,6 +836,116 @@ export default function ClipModal({
                 </div>
               )}
 
+              {/* TAB: REFRAME & CROP (P5.7 & P5.8) */}
+              {activeInspectorTab === 'reframe' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Framing Override Mode</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Auto (AI Smart Face)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Manual Position
+                      </button>
+                    </div>
+                  </div>
+
+                  {cropMode === 'manual' && (
+                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Horizontal Crop X:</span>
+                          <span className="font-mono text-white">{Math.round(cropX * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.0"
+                          max="1.0"
+                          step="0.02"
+                          value={cropX}
+                          onChange={(e) => setCropX(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Crop Scale:</span>
+                          <span className="font-mono text-white">{cropScale.toFixed(2)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="1.8"
+                          step="0.05"
+                          value={cropScale}
+                          onChange={(e) => setCropScale(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Multi-Speaker Layout</label>
+                    <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+                      {['AUTO', 'TRACK', 'SPLIT'].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: AUDIO CONTROLS (P5.9) */}
+              {activeInspectorTab === 'audio' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Volume Gain:</span>
+                      <span className="font-mono text-white">{Math.round(volume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="2.0"
+                      step="0.05"
+                      value={volume}
+                      disabled={isMuted}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      onMouseUp={triggerAutosave}
+                      className="w-full accent-emerald-400"
+                    />
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={isMuted}
+                      onChange={(e) => { setIsMuted(e.target.checked); triggerAutosave(); }}
+                      className="rounded bg-slate-900 border-slate-700 text-rose-500"
+                    />
+                    <span className="text-slate-300 font-medium">Mute Clip Audio</span>
+                  </label>
+                </div>
+              )}
+
               {/* TAB 2: CAPTION STYLE */}
               {activeInspectorTab === 'style' && (
                 <div className="space-y-3">
@@ -541,6 +1000,116 @@ export default function ClipModal({
                       <span className="font-mono text-[10px] text-slate-400">{highlightColor}</span>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* TAB: REFRAME & CROP (P5.7 & P5.8) */}
+              {activeInspectorTab === 'reframe' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Framing Override Mode</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Auto (AI Smart Face)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Manual Position
+                      </button>
+                    </div>
+                  </div>
+
+                  {cropMode === 'manual' && (
+                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Horizontal Crop X:</span>
+                          <span className="font-mono text-white">{Math.round(cropX * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.0"
+                          max="1.0"
+                          step="0.02"
+                          value={cropX}
+                          onChange={(e) => setCropX(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Crop Scale:</span>
+                          <span className="font-mono text-white">{cropScale.toFixed(2)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="1.8"
+                          step="0.05"
+                          value={cropScale}
+                          onChange={(e) => setCropScale(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Multi-Speaker Layout</label>
+                    <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+                      {['AUTO', 'TRACK', 'SPLIT'].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: AUDIO CONTROLS (P5.9) */}
+              {activeInspectorTab === 'audio' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Volume Gain:</span>
+                      <span className="font-mono text-white">{Math.round(volume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="2.0"
+                      step="0.05"
+                      value={volume}
+                      disabled={isMuted}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      onMouseUp={triggerAutosave}
+                      className="w-full accent-emerald-400"
+                    />
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={isMuted}
+                      onChange={(e) => { setIsMuted(e.target.checked); triggerAutosave(); }}
+                      className="rounded bg-slate-900 border-slate-700 text-rose-500"
+                    />
+                    <span className="text-slate-300 font-medium">Mute Clip Audio</span>
+                  </label>
                 </div>
               )}
 
@@ -601,6 +1170,116 @@ export default function ClipModal({
                       {exporting ? 'Rendering Package…' : exportDone ? 'Package Ready ✓' : 'Render Export Package'}
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* TAB: REFRAME & CROP (P5.7 & P5.8) */}
+              {activeInspectorTab === 'reframe' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Framing Override Mode</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Auto (AI Smart Face)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                      >
+                        Manual Position
+                      </button>
+                    </div>
+                  </div>
+
+                  {cropMode === 'manual' && (
+                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Horizontal Crop X:</span>
+                          <span className="font-mono text-white">{Math.round(cropX * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.0"
+                          max="1.0"
+                          step="0.02"
+                          value={cropX}
+                          onChange={(e) => setCropX(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                          <span>Crop Scale:</span>
+                          <span className="font-mono text-white">{cropScale.toFixed(2)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="1.8"
+                          step="0.05"
+                          value={cropScale}
+                          onChange={(e) => setCropScale(parseFloat(e.target.value))}
+                          onMouseUp={triggerAutosave}
+                          className="w-full accent-cyan-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Multi-Speaker Layout</label>
+                    <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+                      {['AUTO', 'TRACK', 'SPLIT'].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: AUDIO CONTROLS (P5.9) */}
+              {activeInspectorTab === 'audio' && (
+                <div className="space-y-3.5 text-xs">
+                  <div>
+                    <div className="flex justify-between text-[11px] text-slate-400 mb-1">
+                      <span>Volume Gain:</span>
+                      <span className="font-mono text-white">{Math.round(volume * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.0"
+                      max="2.0"
+                      step="0.05"
+                      value={volume}
+                      disabled={isMuted}
+                      onChange={(e) => setVolume(parseFloat(e.target.value))}
+                      onMouseUp={triggerAutosave}
+                      className="w-full accent-emerald-400"
+                    />
+                  </div>
+                  <label className="flex items-center space-x-2 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={isMuted}
+                      onChange={(e) => { setIsMuted(e.target.checked); triggerAutosave(); }}
+                      className="rounded bg-slate-900 border-slate-700 text-rose-500"
+                    />
+                    <span className="text-slate-300 font-medium">Mute Clip Audio</span>
+                  </label>
                 </div>
               )}
             </div>
@@ -833,6 +1512,26 @@ export default function ClipModal({
               }`}
             >
               {isLoading === 'reject' ? 'Rejecting…' : 'Reject'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRenderPreview}
+              disabled={isRenderingPreview}
+              className="px-3 py-1.5 rounded bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-800 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span>{isRenderingPreview ? 'Rendering 720p...' : 'Render Preview (720p)'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRenderFinal}
+              disabled={isRenderingFinal}
+              className="px-3.5 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/25 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{isRenderingFinal ? 'Exporting...' : exportDone ? 'Export Ready ✓' : 'Export Final 1080p'}</span>
             </button>
 
             <button

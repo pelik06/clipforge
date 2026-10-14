@@ -59,7 +59,10 @@ def test_create_job_invalid_url(client):
     assert "Invalid video URL" in res.json()["detail"]
 
 
-def test_create_job_and_get_single_job(client):
+def test_create_job_and_get_single_job(client, monkeypatch):
+    async def mock_run(*args, **kwargs):
+        pass
+    monkeypatch.setattr("apps.api.main.run_pipeline_background", mock_run)
     res = client.post("/api/v4/jobs", json={"vod_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"})
     assert res.status_code == 200
     data = res.json()

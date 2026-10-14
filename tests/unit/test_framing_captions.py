@@ -70,7 +70,7 @@ def sample_video(tmp_path_factory):
 def test_job_config_defaults():
     cfg = JobConfig()
     cfg.validate()
-    assert cfg.framing_mode == "center_crop"
+    assert cfg.framing_mode == "auto_follow_speaker"
     assert cfg.caption_preset == "clean"
     assert cfg.caption_language == "auto"
     assert cfg.caption_size == "medium"

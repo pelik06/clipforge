@@ -215,6 +215,16 @@ def run_e2e_tests():
         "stage": "Queued",
         "progress": 0,
         "metadata": {
+            "candidates": [
+                {
+                    "start": c.start,
+                    "end": c.end,
+                    "duration": round(c.duration, 1),
+                    "score": round(c.score, 1),
+                    "reasons": c.reasons,
+                }
+                for c in ranked[:2]
+            ],
             "transcript_segments": [
                 {
                     "text": s.text,

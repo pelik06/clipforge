@@ -5,8 +5,11 @@ from typing import Optional
 
 
 class FramingMode(str, Enum):
+    TRACK = "track"
     AUTO_FOLLOW_SPEAKER = "auto_follow_speaker"
+    GENERAL = "general"
     CENTER_CROP = "center_crop"
+    SPLIT = "split"
     MANUAL_POSITION = "manual_position"
 
 
@@ -34,6 +37,8 @@ class CaptionPosition(str, Enum):
     BOTTOM_SAFE = "bottom_safe"
     CENTER = "center"
     TOP_SAFE = "top_safe"
+
+
 class MomentDetectionMode(str, Enum):
     AI = "ai"
     HEURISTIC = "heuristic"
@@ -44,7 +49,6 @@ class MomentDetectionProvider(str, Enum):
     OPENAI = "openai"
     LOCAL = "local"
     HEURISTIC = "heuristic"
-
 
 
 HEX_COLOR_PATTERN = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -59,7 +63,7 @@ def validate_hex_color(color: str, field_name: str = "color") -> str:
 
 @dataclass
 class JobConfig:
-    framing_mode: str = FramingMode.CENTER_CROP.value
+    framing_mode: str = FramingMode.AUTO_FOLLOW_SPEAKER.value
     caption_preset: str = CaptionPreset.CLEAN.value
     caption_language: str = CaptionLanguage.AUTO.value
     caption_size: str = CaptionSize.MEDIUM.value
@@ -67,12 +71,16 @@ class JobConfig:
     caption_text_color: str = "#FFFFFF"
     caption_highlight_color: str = "#FFFF00"
     caption_word_highlight: bool = False
+    caption_words_per_group: int = 4
+    scene_cut_snap: bool = True
     moment_detection_mode: str = MomentDetectionMode.HEURISTIC.value
-    moment_detection_provider: str = MomentDetectionProvider.GEMINI.value
-    max_clips: int = 5
-    min_clip_duration: float = 12.0
-    max_clip_duration: float = 60.0
+    moment_detection_provider: str = MomentDetectionProvider.HEURISTIC.value
+    min_clips: int = 1
+    max_clips: int = 3
+    min_clip_duration: float = 30.0
+    max_clip_duration: float = 120.0
     enable_scene_detection: bool = True
+    moment_threshold: float = 0.45
 
     def validate(self) -> None:
         if self.framing_mode not in [m.value for m in FramingMode]:
@@ -103,6 +111,12 @@ class JobConfig:
 
         if not (1 <= int(self.max_clips) <= 15):
             raise ValueError(f"max_clips must be between 1 and 15, got {self.max_clips}")
+
+        if int(self.min_clips) < 1:
+            raise ValueError(f"min_clips must be at least 1, got {self.min_clips}")
+
+        if int(self.caption_words_per_group) < 1:
+            raise ValueError(f"caption_words_per_group must be at least 1, got {self.caption_words_per_group}")
 
         if float(self.min_clip_duration) < 3.0:
             raise ValueError(f"min_clip_duration must be at least 3.0 seconds, got {self.min_clip_duration}")

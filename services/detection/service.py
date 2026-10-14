@@ -198,21 +198,5 @@ class SignalDetector:
                         )
                     )
 
-        # Fallback if video is very short
-        if not candidates:
-            cand_dur = min(duration, 12.0)
-            candidates.append(
-                CandidateMoment(
-                    start=0.0,
-                    end=round(cand_dur, 2),
-                    signals={
-                        "audio_energy": 0.7,
-                        "reaction_signal": 0.7,
-                        "speech_density": 0.6,
-                        "sentence_completeness": 0.7,
-                        "duration_score": 0.8,
-                    },
-                )
-            )
-
+        # Strictly return empty list if no valid moments detected (NO_VALID_MOMENTS)
         return candidates
