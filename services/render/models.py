@@ -27,7 +27,7 @@ class RenderPreset(str, Enum):
     HIGH_QUALITY = "high_quality"
     DRAFT = "draft"
     PREVIEW = "preview"
-
+    HYPERFRAMES = "hyperframes"
 
 VALID_TRANSITIONS = {
     RenderJobState.QUEUED: {RenderJobState.PREPARING, RenderJobState.CANCELLED},

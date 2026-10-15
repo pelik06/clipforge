@@ -1138,9 +1138,10 @@ export default function ClipModal({
 
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">Platform Preset</label>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       {[
                         { id: 'tiktok', name: 'TikTok 9:16' },
+                        { id: 'hyperframes', name: '★ HyperFrames HTML' },
                         { id: 'reels', name: 'Instagram Reels' },
                         { id: 'shorts', name: 'YouTube Shorts' }
                       ].map((p) => (

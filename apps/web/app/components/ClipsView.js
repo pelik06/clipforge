@@ -359,10 +359,10 @@ export default function ClipsView({
                         className="flex-1 px-1.5 py-1 rounded bg-[#13151f] border border-[#293245] text-[11px] text-slate-300"
                       >
                         <option value="tiktok">TikTok (9:16)</option>
-                        <option value="youtube_shorts">YouTube Shorts</option>
-                        <option value="instagram_reels">Instagram Reels</option>
+                        <option value="hyperframes">HyperFrames (HTML Motion Graphics)</option>
+                        <option value="high_quality">High Quality Master (1080p)</option>
+                        <option value="draft">Fast Draft (720p)</option>
                       </select>
-
                       {handleTriggerRender && (
                         <button
                           type="button"

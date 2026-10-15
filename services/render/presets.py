@@ -46,6 +46,17 @@ PRESETS: Dict[str, ExportPresetConfig] = {
         ffmpeg_preset="ultrafast",
         audio_normalize=False,
     ),
+    RenderPreset.HYPERFRAMES.value: ExportPresetConfig(
+        name="hyperframes",
+        width=1080,
+        height=1920,
+        fps=30,
+        video_bitrate="6000k",
+        audio_bitrate="192k",
+        crf=20,
+        ffmpeg_preset="fast",
+        audio_normalize=True,
+    ),
 }
 
 

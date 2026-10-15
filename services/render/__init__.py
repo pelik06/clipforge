@@ -18,6 +18,8 @@ from services.render.validator import (
     compute_file_sha256,
 )
 from services.render.worker import RENDER_VERSION, RenderWorker
+from services.render.hyperframes_composition import HyperframesCompositionBuilder, HyperframesConfig
+from services.render.hyperframes_runner import HyperframesRunner, HyperframesRenderResult
 
 __all__ = [
     "RenderJob",
@@ -38,4 +40,8 @@ __all__ = [
     "RenderJobManager",
     "recover_stale_jobs",
     "RENDER_VERSION",
+    "HyperframesCompositionBuilder",
+    "HyperframesConfig",
+    "HyperframesRunner",
+    "HyperframesRenderResult",
 ]

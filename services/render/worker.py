@@ -7,8 +7,8 @@ import time
 from typing import Any, Dict, Optional
 
 from core.config.settings import Settings
+from core.models.transcript import Word
 from core.storage import save_render_job
-from services.render.cancellation import RenderCancellationManager
 from services.render.models import RenderJob, RenderJobState
 from services.render.presets import get_preset_config
 from services.render.progress import RenderProgressTracker
@@ -107,53 +107,80 @@ class RenderWorker:
         duration_sec = float(job.config.get("duration", 0.0))
         vf_filter = job.config.get("vf_filter")
 
-        scale_crop = f"scale={preset_cfg.width}:{preset_cfg.height}:force_original_aspect_ratio=increase,crop={preset_cfg.width}:{preset_cfg.height}"
-        combined_vf = f"{vf_filter},{scale_crop}" if vf_filter else scale_crop
-
-        cmd = [
-            self.settings.ffmpeg_bin,
-            "-y",
-        ]
-        if start_sec > 0.0:
-            cmd.extend(["-ss", str(start_sec)])
-        cmd.extend(["-i", str(src_path)])
-        if duration_sec > 0.0:
-            cmd.extend(["-t", str(duration_sec)])
-
-        cmd.extend([
-            "-vf", combined_vf,
-            "-c:v", "libx264",
-            "-preset", preset_cfg.ffmpeg_preset,
-            "-b:v", preset_cfg.video_bitrate,
-            "-crf", str(preset_cfg.crf),
-            "-r", str(preset_cfg.fps),
-            "-c:a", "aac",
-            "-b:a", preset_cfg.audio_bitrate,
-        ])
-        if preset_cfg.audio_normalize:
-            cmd.extend(["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"])
-
-        cmd.extend(["-movflags", "+faststart", str(tmp_output)])
-
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.cancellation_manager.register_process(job.id, proc)
+            if preset_cfg.name == "hyperframes":
+                from services.render.hyperframes_composition import (
+                    HyperframesCompositionBuilder,
+                    HyperframesConfig,
+                )
+                from services.render.hyperframes_runner import HyperframesRunner
 
-            stdout, stderr = proc.communicate(timeout=180.0)
-            self.cancellation_manager.unregister_process(job.id)
+                comp_dir = work_dir / f"hf_{job.id}"
+                builder = HyperframesCompositionBuilder()
+                words_data = job.config.get("words", [])
+                words = [Word(text=w.get("text", ""), start=float(w.get("start", 0)), end=float(w.get("end", 0))) for w in words_data]
 
-            if self.cancellation_manager.is_cancelled(job.id):
-                job.status = RenderJobState.CANCELLED
-                job.stage = "Render cancelled by operator"
-                if tmp_output.exists():
-                    tmp_output.unlink()
-                save_render_job(job.to_dict())
-                return job
+                builder.build_composition(
+                    output_dir=comp_dir,
+                    source_video_path=src_path,
+                    clip_duration=duration_sec if duration_sec > 0.0 else 60.0,
+                    words=words,
+                    config=HyperframesConfig(
+                        title=job.config.get("title", "HIGHLIGHT MOMENT"),
+                        caption_preset=job.config.get("caption_preset", "karaoke"),
+                        caption_position=job.config.get("caption_position", "bottom_safe"),
+                    ),
+                )
+                runner = HyperframesRunner(quality="draft", fps=preset_cfg.fps)
+                res = runner.render(comp_dir, tmp_output)
+                if not res.success:
+                    raise RuntimeError(f"HyperFrames render failed: {res.error}")
+            else:
+                scale_crop = f"scale={preset_cfg.width}:{preset_cfg.height}:force_original_aspect_ratio=increase,crop={preset_cfg.width}:{preset_cfg.height}"
+                combined_vf = f"{vf_filter},{scale_crop}" if vf_filter else scale_crop
 
-            if proc.returncode != 0:
-                err_text = stderr.decode("utf-8", errors="replace")[-400:]
-                raise RuntimeError(f"FFmpeg render process failed (exit {proc.returncode}): {err_text}")
+                cmd = [
+                    self.settings.ffmpeg_bin,
+                    "-y",
+                ]
+                if start_sec > 0.0:
+                    cmd.extend(["-ss", str(start_sec)])
+                cmd.extend(["-i", str(src_path)])
+                if duration_sec > 0.0:
+                    cmd.extend(["-t", str(duration_sec)])
 
+                cmd.extend([
+                    "-vf", combined_vf,
+                    "-c:v", "libx264",
+                    "-preset", preset_cfg.ffmpeg_preset,
+                    "-b:v", preset_cfg.video_bitrate,
+                    "-crf", str(preset_cfg.crf),
+                    "-r", str(preset_cfg.fps),
+                    "-c:a", "aac",
+                    "-b:a", preset_cfg.audio_bitrate,
+                ])
+                if preset_cfg.audio_normalize:
+                    cmd.extend(["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"])
+
+                cmd.extend(["-movflags", "+faststart", str(tmp_output)])
+
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                self.cancellation_manager.register_process(job.id, proc)
+
+                stdout, stderr = proc.communicate(timeout=180.0)
+                self.cancellation_manager.unregister_process(job.id)
+
+                if self.cancellation_manager.is_cancelled(job.id):
+                    job.status = RenderJobState.CANCELLED
+                    job.stage = "Render cancelled by operator"
+                    if tmp_output.exists():
+                        tmp_output.unlink()
+                    save_render_job(job.to_dict())
+                    return job
+
+                if proc.returncode != 0:
+                    err_text = stderr.decode("utf-8", errors="replace")[-400:]
+                    raise RuntimeError(f"FFmpeg render process failed (exit {proc.returncode}): {err_text}")
         except Exception as exc:
             self.cancellation_manager.unregister_process(job.id)
             if tmp_output.exists():
