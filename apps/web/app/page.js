@@ -481,8 +481,6 @@ export default function Home() {
             setMinClipDuration={setMinClipDuration}
             maxClipDuration={maxClipDuration}
             setMaxClipDuration={setMaxClipDuration}
-            targetDurationPreset={targetDurationPreset}
-            setTargetDurationPreset={setTargetDurationPreset}
             enableSceneDetection={enableSceneDetection}
             setEnableSceneDetection={setEnableSceneDetection}
             selectedJobData={selectedJobData}
