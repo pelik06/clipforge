@@ -100,35 +100,32 @@ def fetch_youtube_transcript(
     temp_stem = f"yt_sub_{uuid.uuid4().hex[:8]}"
     out_tmpl = str(work_dir / temp_stem)
 
-    langs = preferred_langs or ["id", "en"]
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "writesubtitles": True,
-        "writeautomaticsub": True,
-        "subtitleslangs": langs,
-        "subtitlesformat": "json3",
-        "outtmpl": out_tmpl,
-    }
+    langs = preferred_langs or ["en", "id", "en-US", "en-GB"]
+    json_files = []
+    for lang in langs:
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": [lang],
+            "subtitlesformat": "json3",
+            "outtmpl": out_tmpl,
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            json_files = list(work_dir.glob(f"{temp_stem}*.json3"))
+            if json_files:
+                break
+        except Exception:
+            continue
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-    except Exception:
-        pass
-
-    json_files = list(work_dir.glob(f"{temp_stem}*.json3"))
     if not json_files:
         return []
 
     target_file = json_files[0]
-    for lang in langs:
-        for f in json_files:
-            if f".{lang}." in f.name:
-                target_file = f
-                break
-
     try:
         data = json.loads(target_file.read_text(encoding="utf-8"))
         events = data.get("events", [])
@@ -190,7 +187,7 @@ def download_youtube_segment(
     output_path: str,
     start_sec: float = 0.0,
     duration_sec: float = 15.0,
-    max_filesize_mb: int = 50,
+    max_filesize_mb: int = 200,
 ) -> Path:
     """Download a targeted segment of a YouTube video using download_ranges."""
     import yt_dlp

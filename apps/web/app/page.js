@@ -485,6 +485,9 @@ export default function Home() {
             setEnableSceneDetection={setEnableSceneDetection}
             selectedJobData={selectedJobData}
             jobs={jobs}
+            clips={clips}
+            setEditingClip={setEditingClip}
+            onClipDecision={handleClipDecision}
             selectedJobId={selectedJobId}
             setActiveView={setActiveView}
           />

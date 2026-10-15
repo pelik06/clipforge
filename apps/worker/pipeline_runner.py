@@ -280,7 +280,7 @@ def execute_job_pipeline_sync(
                     output_path=str(raw_dl),
                     start_sec=0.0,
                     duration_sec=min(float(dur or 300), 120.0),
-                    max_filesize_mb=50,
+                    max_filesize_mb=200,
                 )
                 update_stage(2, "completed", detail=f"Fallback video segment downloaded ({source_file.stat().st_size} bytes).", elapsed=round(time.time() - t2, 2))
         else:
@@ -499,7 +499,7 @@ def execute_job_pipeline_sync(
                         output_path=str(raw_slice),
                         start_sec=cand.start,
                         duration_sec=cand.duration,
-                        max_filesize_mb=50,
+                        max_filesize_mb=200,
                     )
                 else:
                     actual_slice = Path(cr.render(str(source_file), cand.start, cand.end, str(raw_slice)))

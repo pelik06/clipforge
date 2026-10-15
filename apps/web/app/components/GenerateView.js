@@ -61,6 +61,9 @@ export default function GenerateView({
   setEnableSceneDetection,
   selectedJobData,
   jobs = [],
+  clips = [],
+  setEditingClip,
+  onClipDecision,
   selectedJobId,
   setActiveView
 }) {
@@ -69,8 +72,9 @@ export default function GenerateView({
 
   const activeJob =
     selectedJobData ||
-    jobs.find((j) => j.id === selectedJobId && (j.status === 'processing' || j.status === 'created'));
+    jobs.find((j) => j.id === selectedJobId);
 
+  const jobClips = activeJob ? clips.filter((c) => c.job_id === activeJob.id) : [];
   const captionPresets = [
     {
       id: 'clean',
@@ -453,6 +457,90 @@ export default function GenerateView({
               className="bg-[#aab9c7] h-full transition-all duration-300"
               style={{ width: `${Math.max(5, activeJob.progress || 0)}%` }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Generated Clips from Active Job */}
+      {jobClips.length > 0 && (
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-[#e9ecee] flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#6ee7b7]" />
+                <span>Hasil Render Klip Vertikal ({jobClips.length} Klip)</span>
+              </h2>
+              <p className="text-xs text-[#6e8799] mt-0.5">
+                Klip 9:16 dengan subtitle karaoke siap di-review dan dipublikasikan.
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveView('clips')}
+              className="px-3 py-1.5 rounded-md bg-[#252b3d] hover:bg-[#293245] text-[#e9ecee] text-xs font-medium border border-[#4c5e6b] transition-colors"
+            >
+              Buka Semua di Review Queue →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {jobClips.map((clip) => (
+              <div
+                key={clip.id}
+                className="rounded-lg bg-[#1a1e2b] border border-[#293245] overflow-hidden flex flex-col justify-between hover:border-[#aab9c7] transition-all shadow-sm"
+              >
+                <div className="relative aspect-[9/16] bg-[#13151f] w-full flex items-center justify-center overflow-hidden">
+                  {clip.media_url ? (
+                    <video
+                      src={clip.media_url}
+                      controls
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-xs text-[#6e8799] font-mono">[ Video rendering ]</div>
+                  )}
+                  <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#13151f]/90 text-[#6ee7b7] border border-[#1f4a3d]">
+                      ★ {clip.score}
+                    </span>
+                  </div>
+                  <div className="absolute top-2 right-2 z-10">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#13151f]/90 text-[#aab9c7] border border-[#293245]">
+                      {clip.duration}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3.5 space-y-2">
+                  <div className="text-xs font-semibold text-[#e9ecee] line-clamp-2">
+                    {clip.title}
+                  </div>
+                  <div className="text-[11px] text-[#6e8799] font-mono">
+                    Timecode: {typeof clip.start_time === 'number' ? clip.start_time.toFixed(1) : clip.start_time}s – {typeof clip.end_time === 'number' ? clip.end_time.toFixed(1) : clip.end_time}s
+                  </div>
+                  <div className="pt-2 border-t border-[#293245] flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingClip?.(clip)}
+                      className="flex-1 px-2.5 py-1.5 rounded bg-[#252b3d] hover:bg-[#293245] text-[#e9ecee] text-xs font-medium border border-[#4c5e6b] text-center"
+                    >
+                      Studio Editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onClipDecision?.(clip.id, 'approve')}
+                      className={`px-3 py-1.5 rounded text-xs font-medium border ${
+                        clip.status === 'APPROVED'
+                          ? 'bg-[#14261d] text-[#6ee7b7] border-[#1f4a3d]'
+                          : 'bg-[#1a1e2b] text-[#aab9c7] border-[#293245] hover:border-[#6ee7b7]'
+                      }`}
+                    >
+                      {clip.status === 'APPROVED' ? '✓ Approved' : 'Approve'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
