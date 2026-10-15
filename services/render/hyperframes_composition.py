@@ -1,17 +1,23 @@
 """HyperFrames HTML Video Composition Generator.
 
-Generates frame-perfect HTML/CSS/JS compositions compatible with HyperFrames CLI (0.8.x).
-Supports 9:16 vertical video compositing, kinetic HTML/CSS word captions,
-top hook headline card, and bottom animated progress bar.
+Compiles layer-based HyperframesComposition models into frame-perfect HTML/CSS/GSAP
+projects ready for deterministic rendering via HyperFrames CLI.
 """
 
 from dataclasses import dataclass
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 import shutil
+from typing import Any, Dict, List, Optional
 
 from core.models.transcript import Word
+from services.render.hyperframes_models import (
+    AnimationType,
+    CompositionLayer,
+    HyperframesComposition,
+    LayerType,
+    TemplateType,
+)
 
 
 @dataclass
@@ -28,37 +34,31 @@ class HyperframesConfig:
 
 
 class HyperframesCompositionBuilder:
-    """Builds ready-to-render HyperFrames project directory containing index.html,
+    """Compiles HyperframesComposition data models into executable HyperFrames projects."""
 
-    meta.json, and hyperframes.json.
-    """
-
-    def build_composition(
+    def build_from_composition(
         self,
         output_dir: Path,
         source_video_path: Path,
-        clip_duration: float,
-        words: List[Word],
-        config: Optional[HyperframesConfig] = None,
+        composition: HyperframesComposition,
     ) -> Path:
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        cfg = config or HyperframesConfig()
 
-        # Copy or symlink video into composition folder as video.mp4
+        # 1. Copy source video to local video.mp4
         local_video = output_dir / "video.mp4"
         if not local_video.exists():
             shutil.copyfile(source_video_path, local_video)
 
-        # Build meta.json
+        # 2. Build meta.json
         meta_json = {
-            "id": output_dir.name,
-            "name": cfg.title[:30],
+            "id": composition.composition_id,
+            "name": composition.metadata.get("title", composition.clip_id)[:40],
             "createdAt": "2026-10-15T00:00:00.000Z",
         }
         (output_dir / "meta.json").write_text(json.dumps(meta_json, indent=2), encoding="utf-8")
 
-        # Build hyperframes.json
+        # 3. Build hyperframes.json
         hf_json = {
             "$schema": "https://hyperframes.heygen.com/schema/hyperframes.json",
             "registry": "https://raw.githubusercontent.com/heygen-com/hyperframes/main/registry",
@@ -71,14 +71,86 @@ class HyperframesCompositionBuilder:
         }
         (output_dir / "hyperframes.json").write_text(json.dumps(hf_json, indent=2), encoding="utf-8")
 
-        # Group words into adaptive phrases (3-4 words per phrase)
+        # 4. Generate index.html from layers and captions
+        html_content = self._compile_composition_to_html(composition)
+        (output_dir / "index.html").write_text(html_content, encoding="utf-8")
+
+        return output_dir
+
+    def build_composition(
+        self,
+        output_dir: Path,
+        source_video_path: Path,
+        clip_duration: float,
+        words: List[Word],
+        config: Optional[HyperframesConfig] = None,
+    ) -> Path:
+        """Legacy / convenient adapter creating a default composition and delegating to build_from_composition."""
+        from services.render.hyperframes_templates import generate_initial_composition
+
+        cfg = config or HyperframesConfig()
+        clip_dict = {
+            "id": output_dir.name,
+            "title": cfg.title,
+            "duration": f"{clip_duration:.1f}s",
+            "start_time": 0.0,
+            "end_time": clip_duration,
+            "caption_preset": cfg.caption_preset,
+            "caption_position": cfg.caption_position,
+        }
+        # Fake transcript segment with provided words
+        from core.models.transcript import TranscriptSegment
+        dummy_seg = [TranscriptSegment(text=" ".join([w.text for w in words]), start=0.0, end=clip_duration, words=words)] if words else []
+
+        composition = generate_initial_composition(clip_dict, transcript_segments=dummy_seg)
+        # Apply config overrides
+        for l in composition.layers:
+            if l.type == LayerType.HOOK:
+                l.data["title"] = cfg.title
+            if l.type == LayerType.CAPTION:
+                l.data["font_size"] = cfg.font_size
+                l.data["position"] = cfg.caption_position
+
+        return self.build_from_composition(output_dir, source_video_path, composition)
+
+    def _compile_composition_to_html(self, composition: HyperframesComposition) -> str:
+        duration = max(0.1, composition.duration)
+        w_canvas = composition.width or 1080
+        h_canvas = composition.height or 1920
+
+        # Extract specific layers
+        hook_layers = [l for l in composition.layers if l.type == LayerType.HOOK and l.visible]
+        person_layers = [l for l in composition.layers if l.type == LayerType.PERSON and l.visible]
+        caption_layers = [l for l in composition.layers if l.type == LayerType.CAPTION and l.visible]
+        progress_layers = [l for l in composition.layers if l.type == LayerType.PROGRESS_BAR and l.visible]
+        text_layers = [l for l in composition.layers if l.type == LayerType.TEXT and l.visible]
+
+        # Font styles & Caption styling
+        caption_cfg = caption_layers[0].data if caption_layers else {}
+        font_family = caption_cfg.get("font_family", "Anton")
+        if font_family not in ("Anton", "Montserrat", "Inter", "Roboto"):
+            font_family = "Anton"
+        font_size = caption_cfg.get("font_size", 72)
+        text_color = caption_cfg.get("text_color", "#FFFFFF")
+        active_color = caption_cfg.get("active_color", "#00FF66")
+        caption_pos = caption_cfg.get("position", "bottom_safe")
+
+        pos_styles = {
+            "top_safe": "top: 260px;",
+            "center": "top: 50%; transform: translateY(-50%);",
+            "bottom_safe": "bottom: 240px;",
+        }
+        caption_box_pos = pos_styles.get(caption_pos, pos_styles["bottom_safe"])
+
+        # Group words into 3-4 word phrases
         phrases = []
-        if words:
+        raw_captions = composition.captions or []
+        if raw_captions:
             chunk_size = 4
-            for i in range(0, len(words), chunk_size):
-                chunk = words[i : i + chunk_size]
-                p_start = max(0.0, chunk[0].start)
-                p_end = min(clip_duration, chunk[-1].end + 0.15)
+            for i in range(0, len(raw_captions), chunk_size):
+                chunk = raw_captions[i : i + chunk_size]
+                p_start = max(0.0, float(chunk[0].get("start", 0.0)))
+                p_end = min(duration, float(chunk[-1].get("end", 0.0)) + 0.15)
                 if p_end > p_start:
                     phrases.append({
                         "start": p_start,
@@ -86,55 +158,82 @@ class HyperframesCompositionBuilder:
                         "words": chunk,
                     })
 
-        # Generate index.html
-        html_content = self._generate_html(
-            duration=clip_duration,
-            phrases=phrases,
-            cfg=cfg,
-        )
-        (output_dir / "index.html").write_text(html_content, encoding="utf-8")
-
-        return output_dir
-
-    def _generate_html(
-        self,
-        duration: float,
-        phrases: List[Dict[str, Any]],
-        cfg: HyperframesConfig,
-    ) -> str:
-        pos_styles = {
-            "top_safe": "top: 260px;",
-            "center": "top: 50%; transform: translateY(-50%);",
-            "bottom_safe": "bottom: 240px;",
-        }
-        caption_box_pos = pos_styles.get(cfg.caption_position, pos_styles["bottom_safe"])
-
-        # Colors by preset
-        if cfg.caption_preset == "viral_beast":
-            font_family = "'Anton', sans-serif"
-            text_color = "#FFDE00"
-            active_color = "#00FF66"
-        elif cfg.caption_preset == "neon_cyan":
-            font_family = "'Montserrat', sans-serif"
-            text_color = "#00FFFF"
-            active_color = "#FFFFFF"
-        else:
-            font_family = "'Anton', sans-serif"
-            text_color = "#FFFFFF"
-            active_color = "#FCD34D"
-        # Build phrases HTML & GSAP timeline calls
         phrases_html = []
         gsap_calls = []
 
+        # Progress bar animation
+        if progress_layers:
+            gsap_calls.append(f'tl.to("#progress", {{ width: "100%", duration: {duration:.2f}, ease: "none" }}, 0);')
+
+        # Hook layers rendering and animation
+        hook_html_parts = []
+        for h_layer in hook_layers:
+            h_data = h_layer.data or {}
+            h_title = h_data.get("title", "VIRAL MOMENT")
+            h_badge = h_data.get("badge", "★ HIGHLIGHT")
+            h_bg = h_data.get("bg_color", "rgba(26, 30, 43, 0.94)")
+            h_border = h_data.get("border_color", "#293245")
+            h_text = h_data.get("text_color", "#E9ECEE")
+
+            h_anim = h_layer.animation_in.get("type", "spring")
+            h_dur = h_layer.duration
+
+            hook_html_parts.append(f"""
+      <div id="{h_layer.id}" class="clip hook-banner" data-start="{h_layer.start:.2f}" data-duration="{h_dur:.2f}" data-track-index="{h_layer.z_index}"
+           style="background: {h_bg}; border-color: {h_border}; opacity: {h_layer.opacity}; transform: scale({h_layer.scale});">
+        <span class="hook-badge">{h_badge}</span>
+        <span class="hook-title" style="color: {h_text};">{h_title}</span>
+      </div>""")
+
+            if h_anim == "spring":
+                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ y: -60, opacity: 0 }}, {{ y: 0, opacity: 1, duration: 0.6, ease: "back.out(1.7)" }}, {h_layer.start:.2f});')
+            elif h_anim == "pop":
+                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ scale: 0.7, opacity: 0 }}, {{ scale: 1, opacity: 1, duration: 0.4, ease: "power2.out" }}, {h_layer.start:.2f});')
+            else:
+                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ opacity: 0, y: -30 }}, {{ opacity: 1, y: 0, duration: 0.5 }}, {h_layer.start:.2f});')
+
+            # Exit animation
+            gsap_calls.append(f'tl.to("#{h_layer.id}", {{ opacity: 0, y: -20, duration: 0.4 }}, {max(0.0, h_layer.end - 0.4):.2f});')
+
+        # Person layers rendering and animation
+        person_html_parts = []
+        for p_layer in person_layers:
+            p_data = p_layer.data or {}
+            p_label = p_data.get("person_label", "Speaker")
+            p_badge = p_data.get("badge", "SPEAKER")
+            p_x = p_layer.x
+            p_y = p_layer.y
+            p_scale = p_layer.scale
+            p_anim = p_layer.animation_in.get("type", "fade")
+
+            person_html_parts.append(f"""
+      <div id="{p_layer.id}" class="clip person-card" data-start="{p_layer.start:.2f}" data-duration="{p_layer.duration:.2f}" data-track-index="{p_layer.z_index}"
+           style="left: {p_x:.1f}px; top: {p_y:.1f}px; opacity: {p_layer.opacity}; transform: translate(-50%, -50%) scale({p_scale});">
+        <span class="person-tag">{p_badge}: {p_label}</span>
+      </div>""")
+
+            if p_anim == "slide_left":
+                gsap_calls.append(f'tl.fromTo("#{p_layer.id}", {{ x: "-=100", opacity: 0 }}, {{ x: "+=0", opacity: 1, duration: 0.5 }}, {p_layer.start:.2f});')
+            elif p_anim == "slide_right":
+                gsap_calls.append(f'tl.fromTo("#{p_layer.id}", {{ x: "+=100", opacity: 0 }}, {{ x: "+=0", opacity: 1, duration: 0.5 }}, {p_layer.start:.2f});')
+            elif p_anim == "pop":
+                gsap_calls.append(f'tl.fromTo("#{p_layer.id}", {{ scale: 0.5, opacity: 0 }}, {{ scale: {p_scale}, opacity: 1, duration: 0.4 }}, {p_layer.start:.2f});')
+            else:
+                gsap_calls.append(f'tl.fromTo("#{p_layer.id}", {{ opacity: 0 }}, {{ opacity: 1, duration: 0.3 }}, {p_layer.start:.2f});')
+
+        # Captions rendering
         for p_idx, p in enumerate(phrases):
             p_id = f"phrase-{p_idx}"
             word_spans = []
             for w_idx, w in enumerate(p["words"]):
                 w_id = f"w-{p_idx}-{w_idx}"
-                word_spans.append(f'<span id="{w_id}" class="word-span">{w.text}</span>')
-                # Active word highlight animation in GSAP
-                w_start_rel = max(0.0, w.start)
-                w_dur = max(0.12, (w.end - w.start))
+                w_text = w.get("text", "")
+                word_spans.append(f'<span id="{w_id}" class="word-span">{w_text}</span>')
+
+                # Word active animation
+                w_start_rel = max(0.0, float(w.get("start", 0.0)))
+                w_end_rel = max(w_start_rel + 0.12, float(w.get("end", w_start_rel + 0.25)))
+                w_dur = max(0.12, w_end_rel - w_start_rel)
                 gsap_calls.append(
                     f'tl.fromTo("#{w_id}", {{ color: "{text_color}", scale: 0.96 }}, {{ color: "{active_color}", scale: 1.12, duration: {w_dur:.2f}, textDecoration: "underline" }}, {w_start_rel:.2f});'
                 )
@@ -143,41 +242,45 @@ class HyperframesCompositionBuilder:
             p_start = p["start"]
             p_dur = p["duration"]
             phrases_html.append(
-                f'<div id="{p_id}" class="clip phrase-card" data-start="{p_start:.2f}" data-duration="{p_dur:.2f}" data-track-index="2">'
+                f'<div id="{p_id}" class="clip phrase-card" data-start="{p_start:.2f}" data-duration="{p_dur:.2f}" data-track-index="8">'
                 f'<div class="phrase-text">{words_str}</div>'
                 f"</div>"
             )
 
+        all_hooks_html = "\n".join(hook_html_parts)
+        all_persons_html = "\n".join(person_html_parts)
         all_phrases_html = "\n      ".join(phrases_html)
         gsap_script = "\n      ".join(gsap_calls)
+
+        progress_color = progress_layers[0].data.get("color", "#00FF66") if progress_layers else "#00FF66"
 
         return f"""<!doctype html>
 <html lang="en" data-resolution="portrait">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=1080, height=1920" />
+    <meta name="viewport" content="width={w_canvas}, height={h_canvas}" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@800;900&display=swap" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <style>
       * {{ margin: 0; padding: 0; box-sizing: border-box; }}
       html, body {{
-        width: 1080px;
-        height: 1920px;
-        background: {cfg.theme_bg};
+        width: {w_canvas}px;
+        height: {h_canvas}px;
+        background: #13151f;
         overflow: hidden;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }}
       #root {{
         position: relative;
-        width: 1080px;
-        height: 1920px;
+        width: {w_canvas}px;
+        height: {h_canvas}px;
       }}
       .bg-video {{
         position: absolute;
         inset: 0;
-        width: 1080px;
-        height: 1920px;
+        width: {w_canvas}px;
+        height: {h_canvas}px;
         object-fit: cover;
       }}
       .hook-banner {{
@@ -186,8 +289,8 @@ class HyperframesCompositionBuilder:
         left: 60px;
         right: 60px;
         padding: 24px 32px;
-        background: rgba(26, 30, 43, 0.92);
-        border: 2px solid {cfg.theme_border};
+        background: rgba(26, 30, 43, 0.94);
+        border: 2px solid #293245;
         border-radius: 20px;
         box-shadow: 0 16px 36px rgba(0,0,0,0.6);
         color: #e9ecee;
@@ -214,6 +317,22 @@ class HyperframesCompositionBuilder:
         text-overflow: ellipsis;
         white-space: nowrap;
       }}
+      .person-card {{
+        position: absolute;
+        z-index: 5;
+        pointer-events: none;
+      }}
+      .person-tag {{
+        background: rgba(30, 35, 51, 0.85);
+        color: #aab9c7;
+        border: 1px solid #293245;
+        font-size: 18px;
+        font-weight: 700;
+        padding: 6px 14px;
+        border-radius: 8px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }}
       .caption-container {{
         position: absolute;
         left: 50px;
@@ -232,8 +351,8 @@ class HyperframesCompositionBuilder:
         width: 100%;
       }}
       .phrase-text {{
-        font-family: {font_family};
-        font-size: {cfg.font_size}px;
+        font-family: '{font_family}', sans-serif;
+        font-size: {font_size}px;
         font-weight: 900;
         color: {text_color};
         text-shadow: 0 4px 16px rgba(0,0,0,0.95), 0 0 4px #000;
@@ -249,7 +368,7 @@ class HyperframesCompositionBuilder:
         position: absolute;
         bottom: 0;
         left: 0;
-        width: 1080px;
+        width: {w_canvas}px;
         height: 12px;
         background: rgba(41, 50, 69, 0.7);
         z-index: 30;
@@ -257,8 +376,8 @@ class HyperframesCompositionBuilder:
       .progress-fill {{
         height: 100%;
         width: 0%;
-        background: #00FF66;
-        box-shadow: 0 0 12px rgba(0,255,102,0.8);
+        background: {progress_color};
+        box-shadow: 0 0 12px {progress_color};
       }}
     </style>
   </head>
@@ -268,8 +387,8 @@ class HyperframesCompositionBuilder:
       data-composition-id="main"
       data-start="0"
       data-duration="{duration:.2f}"
-      data-width="1080"
-      data-height="1920"
+      data-width="{w_canvas}"
+      data-height="{h_canvas}"
     >
       <video
         id="bg-video"
@@ -281,10 +400,9 @@ class HyperframesCompositionBuilder:
         data-has-audio="true"
       ></video>
 
-      <div id="hook" class="clip hook-banner" data-start="0" data-duration="{min(10.0, duration):.2f}" data-track-index="1">
-        <span class="hook-badge">★ VIRAL</span>
-        <span class="hook-title">{cfg.title}</span>
-      </div>
+      {all_persons_html}
+
+      {all_hooks_html}
 
       <div class="caption-container">
         {all_phrases_html}
@@ -296,9 +414,6 @@ class HyperframesCompositionBuilder:
     </div>
     <script>
       const tl = gsap.timeline({{ paused: true }});
-      tl.to("#progress", {{ width: "100%", duration: {duration:.2f}, ease: "none" }}, 0);
-      tl.fromTo("#hook", {{ y: -50, opacity: 0 }}, {{ y: 0, opacity: 1, duration: 0.6, ease: "power2.out" }}, 0);
-      tl.to("#hook", {{ opacity: 0, y: -20, duration: 0.5 }}, {min(9.5, duration - 0.5):.2f});
       {gsap_script}
       window.__timelines["main"] = tl;
       tl.seek(0);

@@ -166,8 +166,8 @@ class EditorState:
 
     def clone(self) -> "EditorState":
         """Produce an isolated deep copy of the editor state."""
-        return EditorState.from_dict(self.to_dict())
-
+        import copy
+        return copy.deepcopy(self)
 
 @dataclass
 class RenderSnapshot:

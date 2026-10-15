@@ -95,6 +95,7 @@ class StudioRenderBridge:
             "variant": f"v{state.editor_version}",
             "vf_filter": ",".join(vf_parts) if vf_parts else None,
             "af_filter": ",".join(af_parts) if af_parts else None,
+            "composition": state.user_overrides.get("composition") or state.output.get("composition"),
         }
         return config, ass_path_str
 

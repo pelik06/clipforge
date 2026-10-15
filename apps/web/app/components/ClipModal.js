@@ -28,6 +28,9 @@ import {
   Save,
   AlertTriangle
 } from 'lucide-react';
+import HyperFramesCanvasOverlay from './HyperFramesEditor/HyperFramesCanvasOverlay';
+import HookEditor from './HyperFramesEditor/HookEditor';
+import HyperFramesLayers from './HyperFramesEditor/HyperFramesLayers';
 
 export default function ClipModal({
   clip,
@@ -114,13 +117,16 @@ export default function ClipModal({
   const [captionPosition, setCaptionPosition] = useState('bottom_safe');
   const [captionColor, setCaptionColor] = useState('#FFFFFF');
   const [highlightColor, setHighlightColor] = useState('#FBBF24');
+  // HyperFrames Composition State (P6)
+  const [composition, setComposition] = useState(clip.composition || null);
+  const [selectedLayerId, setSelectedLayerId] = useState('layer_hook_title');
+  const [showHyperframesPreview, setShowHyperframesPreview] = useState(true);
 
   // Export settings
   const [exportRes, setExportRes] = useState('1080p');
-  const [exportPlatform, setExportPlatform] = useState('tiktok');
+  const [exportPlatform, setExportPlatform] = useState('hyperframes');
   const [exporting, setExporting] = useState(false);
   const [exportDone, setExportDone] = useState(false);
-
   const isApproved = clip.status === 'APPROVED';
   const isRejected = clip.status === 'REJECTED';
   const isWaiting = !isApproved && !isRejected;
@@ -138,6 +144,7 @@ export default function ClipModal({
     layoutMode,
     volume,
     isMuted,
+    composition: composition ? JSON.parse(JSON.stringify(composition)) : null,
   });
 
   const pushUndo = () => {
@@ -161,6 +168,7 @@ export default function ClipModal({
     setLayoutMode(prev.layoutMode);
     setVolume(prev.volume);
     setIsMuted(prev.isMuted);
+    if (prev.composition) setComposition(prev.composition);
   };
 
   const handleRedo = () => {
@@ -179,6 +187,7 @@ export default function ClipModal({
     setLayoutMode(next.layoutMode);
     setVolume(next.volume);
     setIsMuted(next.isMuted);
+    if (next.composition) setComposition(next.composition);
   };
 
   // Load editor state from backend on mount
@@ -207,6 +216,11 @@ export default function ClipModal({
             if (st.audio) {
               setVolume(st.audio.volume !== undefined ? st.audio.volume : 1.0);
               setIsMuted(Boolean(st.audio.mute));
+              if (st.user_overrides?.composition) {
+                setComposition(st.user_overrides.composition);
+              } else if (clip.composition) {
+                setComposition(clip.composition);
+              }
             }
           }
         }
@@ -230,6 +244,9 @@ export default function ClipModal({
         audio: { volume: isMuted ? 0.0 : volume, mute: isMuted },
         editor_version: editorVersion + 1,
         status: editorStatus,
+        user_overrides: {
+          composition: composition,
+        },
       };
       const res = await fetch(`/api/v4/editor/${clip.id}`, {
         method: 'PUT',
@@ -647,40 +664,63 @@ export default function ClipModal({
                 </div>
               )}
 
-              {/* Live Overlay Subtitle Synced to Playhead */}
-              <div
-                className={`absolute left-0 right-0 px-2 text-center pointer-events-none transition-all ${
-                  captionPosition === 'top'
-                    ? 'top-4'
-                    : captionPosition === 'center'
-                    ? 'top-1/2 -translate-y-1/2'
-                    : 'bottom-6'
-                }`}
-              >
-                {visibleCaption ? (
-                  <div
-                    className={`inline-block px-2 py-1 rounded font-extrabold tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] ${
-                      captionSize === 'small'
-                        ? 'text-[11px]'
-                        : captionSize === 'large'
-                        ? 'text-[15px]'
-                        : 'text-[13px]'
-                    }`}
-                    style={{ color: captionColor }}
-                  >
-                    <span>{visibleCaption.text}</span>
-                  </div>
-                ) : (
-                  <div className="text-[10px] text-slate-500 font-mono italic">
-                    [No subtitle chunk active]
-                  </div>
-                )}
-              </div>
+              {/* HyperFrames Interactive Canvas Overlay (P6) */}
+              {showHyperframesPreview ? (
+                <HyperFramesCanvasOverlay
+                  composition={composition}
+                  currentTime={currentTime}
+                  selectedLayerId={selectedLayerId}
+                  setSelectedLayerId={setSelectedLayerId}
+                  onUpdateLayer={(updated) => {
+                    pushUndo();
+                    setComposition((prev) => ({
+                      ...prev,
+                      layers: (prev?.layers || []).map((l) => (l.id === updated.id ? updated : l)),
+                    }));
+                    triggerAutosave();
+                  }}
+                  activeCaptionText={visibleCaption ? visibleCaption.text : ''}
+                />
+              ) : (
+                <div
+                  className={`absolute left-0 right-0 px-2 text-center pointer-events-none transition-all ${
+                    captionPosition === 'top'
+                      ? 'top-4'
+                      : captionPosition === 'center'
+                      ? 'top-1/2 -translate-y-1/2'
+                      : 'bottom-6'
+                  }`}
+                >
+                  {visibleCaption && (
+                    <div
+                      className="inline-block px-2 py-1 rounded font-extrabold tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] text-[13px]"
+                      style={{ color: captionColor }}
+                    >
+                      <span>{visibleCaption.text}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Timecode badge on monitor */}
               <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-sm font-mono text-[10px] text-slate-300 tabular-nums">
                 {formatTimecode(currentTime)} / {formatTimecode(totalDuration)}
               </div>
+            </div>
+
+            {/* HyperFrames Live Toggle */}
+            <div className="mt-2.5 flex items-center justify-between w-[185px]">
+              <button
+                type="button"
+                onClick={() => setShowHyperframesPreview(!showHyperframesPreview)}
+                className={`w-full py-1 rounded text-[10px] font-mono border transition-colors text-center ${
+                  showHyperframesPreview
+                    ? 'bg-[#252b3d] text-amber-300 border-amber-400'
+                    : 'bg-[#13151f] text-slate-500 border-[#293245]'
+                }`}
+              >
+                ★ HyperFrames DOM: {showHyperframesPreview ? 'ON' : 'OFF'}
+              </button>
             </div>
           </div>
 
@@ -700,6 +740,32 @@ export default function ClipModal({
                 >
                   <Type className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
                   <span>Subtitle Chunk</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveInspectorTab('hook')}
+                  className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                    activeInspectorTab === 'hook'
+                      ? 'bg-[#293245] text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" aria-hidden="true" />
+                  <span>Hook Cover</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveInspectorTab('layers')}
+                  className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                    activeInspectorTab === 'layers'
+                      ? 'bg-[#293245] text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-blue-400" aria-hidden="true" />
+                  <span>Layers</span>
                 </button>
 
                 <button
@@ -834,6 +900,43 @@ export default function ClipModal({
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* TAB: HOOK COVER EDITOR (P6) */}
+              {activeInspectorTab === 'hook' && (
+                <HookEditor
+                  hookLayer={composition?.layers?.find((l) => l.type === 'hook')}
+                  onUpdateHook={(updated) => {
+                    pushUndo();
+                    setComposition((prev) => ({
+                      ...prev,
+                      layers: (prev?.layers || []).map((l) => (l.id === updated.id ? updated : l)),
+                    }));
+                    triggerAutosave();
+                  }}
+                />
+              )}
+
+              {/* TAB: LAYERS & MOTION (P6) */}
+              {activeInspectorTab === 'layers' && (
+                <HyperFramesLayers
+                  layers={composition?.layers || []}
+                  selectedLayerId={selectedLayerId}
+                  setSelectedLayerId={setSelectedLayerId}
+                  onUpdateLayer={(updated) => {
+                    pushUndo();
+                    setComposition((prev) => ({
+                      ...prev,
+                      layers: (prev?.layers || []).map((l) => (l.id === updated.id ? updated : l)),
+                    }));
+                    triggerAutosave();
+                  }}
+                  onReorderLayers={(newLayers) => {
+                    pushUndo();
+                    setComposition((prev) => ({ ...prev, layers: newLayers }));
+                    triggerAutosave();
+                  }}
+                />
               )}
 
               {/* TAB: REFRAME & CROP (P5.7 & P5.8) */}

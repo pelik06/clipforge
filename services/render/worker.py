@@ -117,20 +117,24 @@ class RenderWorker:
 
                 comp_dir = work_dir / f"hf_{job.id}"
                 builder = HyperframesCompositionBuilder()
-                words_data = job.config.get("words", [])
-                words = [Word(text=w.get("text", ""), start=float(w.get("start", 0)), end=float(w.get("end", 0))) for w in words_data]
-
-                builder.build_composition(
-                    output_dir=comp_dir,
-                    source_video_path=src_path,
-                    clip_duration=duration_sec if duration_sec > 0.0 else 60.0,
-                    words=words,
-                    config=HyperframesConfig(
-                        title=job.config.get("title", "HIGHLIGHT MOMENT"),
-                        caption_preset=job.config.get("caption_preset", "karaoke"),
-                        caption_position=job.config.get("caption_position", "bottom_safe"),
-                    ),
-                )
+                if "composition" in job.config and isinstance(job.config["composition"], dict):
+                    from services.render.hyperframes_models import HyperframesComposition
+                    comp = HyperframesComposition.from_dict(job.config["composition"])
+                    builder.build_from_composition(comp_dir, src_path, comp)
+                else:
+                    words_data = job.config.get("words", [])
+                    words = [Word(text=w.get("text", ""), start=float(w.get("start", 0)), end=float(w.get("end", 0))) for w in words_data]
+                    builder.build_composition(
+                        output_dir=comp_dir,
+                        source_video_path=src_path,
+                        clip_duration=duration_sec if duration_sec > 0.0 else 60.0,
+                        words=words,
+                        config=HyperframesConfig(
+                            title=job.config.get("title", "HIGHLIGHT MOMENT"),
+                            caption_preset=job.config.get("caption_preset", "karaoke"),
+                            caption_position=job.config.get("caption_position", "bottom_safe"),
+                        ),
+                    )
                 runner = HyperframesRunner(quality="draft", fps=preset_cfg.fps)
                 res = runner.render(comp_dir, tmp_output)
                 if not res.success:

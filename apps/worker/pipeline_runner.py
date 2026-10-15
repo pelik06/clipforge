@@ -763,8 +763,22 @@ def execute_job_pipeline_sync(
         recommended_clips = rec_engine.recommend_clips(raw_clip_objs, quality_map=quality_map)
         diversified_clips = topic_clusterer.enforce_family_diversity(recommended_clips)
 
+        from services.render.hyperframes_templates import generate_initial_composition
+        from services.editor.editor_state import EditorStateManager
+        from core.storage import save_editor_state
+
         for clip_obj in diversified_clips:
+            c_segs = [s for s in transcript_segments if s.end > clip_obj["start_time"] and s.start < clip_obj["end_time"]]
+            hf_comp = generate_initial_composition(clip_obj, transcript_segments=c_segs)
+            clip_obj["composition"] = hf_comp.to_dict()
             save_clip(clip_obj)
+
+            # Persist in EditorState for Studio Editor
+            ed_mgr = EditorStateManager()
+            state = ed_mgr.load_or_initialize(clip_obj, transcript_segments=c_segs)
+            state.user_overrides["composition"] = hf_comp.to_dict()
+            ed_mgr.save(state)
+
             rendered_clips.append(clip_obj)
         update_stage(12, "completed", detail=f"All {len(rendered_clips)} clips registered in review queue. Awaiting human operator approval.", elapsed=round(time.time() - t12, 2))
         job["status"] = "waiting_approval"
