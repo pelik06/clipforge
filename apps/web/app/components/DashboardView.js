@@ -86,7 +86,7 @@ export default function DashboardView({
   return (
     <div className="space-y-6">
       {/* Workspace Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#222631]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#293245]">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-white">Dashboard</h1>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -97,14 +97,14 @@ export default function DashboardView({
         <div className="flex items-center gap-2.5">
           <button
             onClick={() => setActiveView('clips')}
-            className="px-3 py-1.5 rounded-md bg-[#14161c] hover:bg-[#1a1d24] text-slate-300 text-xs font-medium border border-[#222631] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2563eb]"
+            className="px-3 py-1.5 rounded-md bg-[#1a1e2b] hover:bg-[#1a1d24] text-slate-300 text-xs font-medium border border-[#293245] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#aab9c7]"
           >
             Review Queue ({waitingApprovalClips.length})
           </button>
 
           <button
             onClick={() => setActiveView('generate')}
-            className="px-3.5 py-1.5 rounded-md bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2563eb]"
+            className="px-3.5 py-1.5 rounded-md bg-[#aab9c7] hover:bg-[#e9ecee] text-white text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#aab9c7]"
           >
             + Generate Clips
           </button>
@@ -113,7 +113,7 @@ export default function DashboardView({
 
       {/* Metrics Ribbon */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-3.5 rounded-lg bg-[#14161c] border border-[#222631]">
+        <div className="p-3.5 rounded-lg bg-[#1a1e2b] border border-[#293245]">
           <div className="text-[11px] text-slate-400 font-medium">Total Clips</div>
           <div className="text-2xl font-semibold text-white mt-1 tabular-nums">{allClips.length}</div>
           <div className="text-[11px] text-slate-500 mt-0.5 tabular-nums">
@@ -121,7 +121,7 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className="p-3.5 rounded-lg bg-[#14161c] border border-[#222631]">
+        <div className="p-3.5 rounded-lg bg-[#1a1e2b] border border-[#293245]">
           <div className="text-[11px] text-slate-400 font-medium">Awaiting Review</div>
           <div className="text-2xl font-semibold text-amber-400 mt-1 tabular-nums">
             {waitingApprovalClips.length}
@@ -129,7 +129,7 @@ export default function DashboardView({
           <div className="text-[11px] text-slate-500 mt-0.5">Pending operator decision</div>
         </div>
 
-        <div className="p-3.5 rounded-lg bg-[#14161c] border border-[#222631]">
+        <div className="p-3.5 rounded-lg bg-[#1a1e2b] border border-[#293245]">
           <div className="text-[11px] text-slate-400 font-medium">Approved for Publish</div>
           <div className="text-2xl font-semibold text-emerald-400 mt-1 tabular-nums">
             {approvedClips.length}
@@ -137,7 +137,7 @@ export default function DashboardView({
           <div className="text-[11px] text-slate-500 mt-0.5">Signed off</div>
         </div>
 
-        <div className="p-3.5 rounded-lg bg-[#14161c] border border-[#222631]">
+        <div className="p-3.5 rounded-lg bg-[#1a1e2b] border border-[#293245]">
           <div className="text-[11px] text-slate-400 font-medium">Render Queue & Exports</div>
           <div className="text-2xl font-semibold text-blue-400 mt-1 tabular-nums">
             {renderJobs.length} / {exportsList.length}
@@ -149,9 +149,9 @@ export default function DashboardView({
       </div>
 
       {/* OPERATOR REVIEW: RECENT CLIPS (5 TERBARU) */}
-      <div className="rounded-lg bg-[#14161c] border border-[#222631] overflow-hidden">
+      <div className="rounded-lg bg-[#1a1e2b] border border-[#293245] overflow-hidden">
         {/* Toolbar Header */}
-        <div className="px-4 py-3 border-b border-[#222631] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="px-4 py-3 border-b border-[#293245] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
               <Film className="w-4 h-4 text-slate-400" aria-hidden="true" />
@@ -161,11 +161,11 @@ export default function DashboardView({
             </div>
 
             {/* Quick Status Filters */}
-            <div className="flex items-center bg-[#0c0d11] p-0.5 rounded border border-[#222631] text-[11px]">
+            <div className="flex items-center bg-[#13151f] p-0.5 rounded border border-[#293245] text-[11px]">
               <button
                 onClick={() => setRecentFilter('all')}
                 className={`px-2 py-0.5 rounded transition-colors ${
-                  recentFilter === 'all' ? 'bg-[#222631] text-white' : 'text-slate-400 hover:text-slate-200'
+                  recentFilter === 'all' ? 'bg-[#293245] text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 All ({recentFiveClips.length})
@@ -173,7 +173,7 @@ export default function DashboardView({
               <button
                 onClick={() => setRecentFilter('pending')}
                 className={`px-2 py-0.5 rounded transition-colors ${
-                  recentFilter === 'pending' ? 'bg-[#222631] text-white' : 'text-slate-400 hover:text-slate-200'
+                  recentFilter === 'pending' ? 'bg-[#293245] text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 Pending ({pendingInRecent.length})
@@ -181,7 +181,7 @@ export default function DashboardView({
               <button
                 onClick={() => setRecentFilter('approved')}
                 className={`px-2 py-0.5 rounded transition-colors ${
-                  recentFilter === 'approved' ? 'bg-[#222631] text-white' : 'text-slate-400 hover:text-slate-200'
+                  recentFilter === 'approved' ? 'bg-[#293245] text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 Approved ({recentFiveClips.filter((c) => c.status === 'APPROVED').length})
@@ -203,7 +203,7 @@ export default function DashboardView({
 
             <button
               onClick={() => setActiveView('clips')}
-              className="text-xs text-[#3b82f6] hover:text-[#60a5fa] flex items-center gap-1 transition-colors ml-1"
+              className="text-xs text-[#aab9c7] hover:text-[#60a5fa] flex items-center gap-1 transition-colors ml-1"
             >
               <span>View all ({allClips.length})</span>
               <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -218,7 +218,7 @@ export default function DashboardView({
               : 'No clips generated yet. Submit a video link to start.'}
           </div>
         ) : (
-          <div className="divide-y divide-[#222631]">
+          <div className="divide-y divide-[#293245]">
             {displayedRecentClips.map((clip) => {
               const isApproved = clip.status === 'APPROVED';
               const isRejected = clip.status === 'REJECTED';
@@ -237,11 +237,11 @@ export default function DashboardView({
                       setEditingClip(clip);
                     }
                   }}
-                  className="p-3.5 hover:bg-[#181b22] cursor-pointer transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 group focus-visible:outline-none focus-visible:bg-[#181b22] focus-visible:ring-1 focus-visible:ring-[#2563eb]"
+                  className="p-3.5 hover:bg-[#181b22] cursor-pointer transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 group focus-visible:outline-none focus-visible:bg-[#181b22] focus-visible:ring-1 focus-visible:ring-[#aab9c7]"
                 >
                   {/* Left: Thumbnail & Meta */}
                   <div className="flex items-start gap-3.5 min-w-0">
-                    <div className="w-11 h-16 rounded bg-black border border-[#2b3140] shrink-0 overflow-hidden relative flex items-center justify-center">
+                    <div className="w-11 h-16 rounded bg-black border border-[#4c5e6b] shrink-0 overflow-hidden relative flex items-center justify-center">
                       {clip.media_url ? (
                         <video
                           src={clip.media_url}
@@ -258,7 +258,7 @@ export default function DashboardView({
                         <span className="text-xs font-medium text-white truncate max-w-[360px] group-hover:text-blue-300 transition-colors">
                           {clip.title || `Clip #${clip.id}`}
                         </span>
-                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#1c202a] text-slate-300 font-mono tabular-nums border border-[#2b3140]">
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#1e2333] text-slate-300 font-mono tabular-nums border border-[#4c5e6b]">
                           Score: {clip.score || '90/100'}
                         </span>
                         {clip.is_recommended && (
@@ -267,7 +267,7 @@ export default function DashboardView({
                           </span>
                         )}
                         {clip.is_fixture && (
-                          <span className="text-[9px] px-1 rounded bg-[#2b3140]/60 text-slate-400 font-mono">
+                          <span className="text-[9px] px-1 rounded bg-[#4c5e6b]/60 text-slate-400 font-mono">
                             DEMO
                           </span>
                         )}
@@ -302,7 +302,7 @@ export default function DashboardView({
                         e.stopPropagation();
                         setEditingClip(clip);
                       }}
-                      className="px-2.5 py-1 rounded text-xs text-slate-300 hover:text-white bg-[#1a1d24] hover:bg-[#222631] border border-[#2b3140] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2563eb]"
+                      className="px-2.5 py-1 rounded text-xs text-slate-300 hover:text-white bg-[#1a1d24] hover:bg-[#293245] border border-[#4c5e6b] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#aab9c7]"
                     >
                       Studio Editor
                     </button>
@@ -356,7 +356,7 @@ export default function DashboardView({
       {/* P4 FEATURE FROM MASTER: Render Queue & Export Jobs */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-7 space-y-4">
-          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4">
+          <div className="rounded-lg bg-[#1a1e2b] border border-[#293245] p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-blue-400" aria-hidden="true" />
@@ -368,7 +368,7 @@ export default function DashboardView({
                 {handleBatchRender && (
                   <button
                     onClick={handleBatchRender}
-                    className="px-2.5 py-1 rounded bg-[#222631] hover:bg-[#2b3140] text-slate-300 text-xs font-medium transition-colors"
+                    className="px-2.5 py-1 rounded bg-[#293245] hover:bg-[#4c5e6b] text-slate-300 text-xs font-medium transition-colors"
                   >
                     Batch Render Top 3
                   </button>
@@ -394,7 +394,7 @@ export default function DashboardView({
                   return (
                     <div
                       key={rjob.id}
-                      className="p-3 rounded-md bg-[#0c0d11] border border-[#1d212b] text-xs flex flex-col gap-2"
+                      className="p-3 rounded-md bg-[#13151f] border border-[#293245] text-xs flex flex-col gap-2"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -436,7 +436,7 @@ export default function DashboardView({
                         </div>
                       </div>
 
-                      <div className="w-full bg-[#14161c] h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-[#1a1e2b] h-1.5 rounded-full overflow-hidden">
                         <div
                           className={`h-full transition-all duration-300 ${
                             isCompleted ? 'bg-emerald-500' : isFailed ? 'bg-rose-500' : 'bg-blue-500'
@@ -457,7 +457,7 @@ export default function DashboardView({
           </div>
 
           {/* Job History & Persistence */}
-          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4">
+          <div className="rounded-lg bg-[#1a1e2b] border border-[#293245] p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-slate-400" aria-hidden="true" />
@@ -478,8 +478,8 @@ export default function DashboardView({
                     onClick={() => setSelectedJobId && setSelectedJobId(j.id)}
                     className={`w-full text-left p-2.5 rounded border text-xs transition-colors flex items-center justify-between ${
                       j.id === selectedJobId
-                        ? 'bg-[#1c202a] border-blue-500/50 text-white'
-                        : 'bg-[#0c0d11] border-[#1d212b] text-slate-300 hover:border-[#2b3140]'
+                        ? 'bg-[#1e2333] border-blue-500/50 text-white'
+                        : 'bg-[#13151f] border-[#293245] text-slate-300 hover:border-[#4c5e6b]'
                     }`}
                   >
                     <div className="min-w-0">
@@ -499,7 +499,7 @@ export default function DashboardView({
 
         {/* Right Column: P4/P5 Export Library & Engine Diagnostics */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-4">
+          <div className="rounded-lg bg-[#1a1e2b] border border-[#293245] p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Film className="w-4 h-4 text-emerald-400" aria-hidden="true" />
@@ -521,7 +521,7 @@ export default function DashboardView({
                 {exportsList.map((exp) => (
                   <div
                     key={exp.id}
-                    className="p-2.5 rounded bg-[#0c0d11] border border-[#1d212b] text-xs flex items-center justify-between gap-2"
+                    className="p-2.5 rounded bg-[#13151f] border border-[#293245] text-xs flex items-center justify-between gap-2"
                   >
                     <div className="min-w-0">
                       <div className="font-semibold text-white truncate max-w-[180px]">
@@ -537,7 +537,7 @@ export default function DashboardView({
                         <a
                           href={exp.url}
                           download
-                          className="p-1 rounded bg-[#1c202a] text-emerald-400 hover:text-white"
+                          className="p-1 rounded bg-[#1e2333] text-emerald-400 hover:text-white"
                           title="Download MP4"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -560,7 +560,7 @@ export default function DashboardView({
           </div>
 
           {/* Engine Dependencies Bar */}
-          <div className="rounded-lg bg-[#14161c] border border-[#222631] p-3.5">
+          <div className="rounded-lg bg-[#1a1e2b] border border-[#293245] p-3.5">
             <div className="flex items-center gap-2 mb-2.5">
               <ShieldCheck className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
               <span className="text-xs font-semibold text-white uppercase tracking-wider">
@@ -572,7 +572,7 @@ export default function DashboardView({
                 Object.entries(systemDeps).map(([tool, ready]) => (
                   <div
                     key={tool}
-                    className="flex items-center justify-between p-2 rounded bg-[#0c0d11] border border-[#1d212b]"
+                    className="flex items-center justify-between p-2 rounded bg-[#13151f] border border-[#293245]"
                   >
                     <span className="text-slate-300 font-mono text-[11px]">{tool}</span>
                     <span

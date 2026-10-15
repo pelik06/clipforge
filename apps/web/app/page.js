@@ -374,7 +374,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0c0d11] text-[#f3f4f6] flex flex-col font-sans selection:bg-[#2563eb] selection:text-white">
+    <div className="min-h-screen bg-[#13151f] text-[#f3f4f6] flex flex-col font-sans selection:bg-[#aab9c7] selection:text-white">
       {/* Top Navbar */}
       <Navbar
         activeView={activeView}
@@ -394,7 +394,7 @@ export default function Home() {
                 ? 'bg-[#14261d] border-emerald-800/50 text-emerald-200'
                 : banner.type === 'error'
                 ? 'bg-[#22171a] border-rose-900/50 text-rose-200'
-                : 'bg-[#1c2233] border-blue-900/50 text-blue-200'
+                : 'bg-[#252b3d] border-blue-900/50 text-blue-200'
             }`}
           >
             <div className="flex items-center gap-2.5">
@@ -516,7 +516,7 @@ export default function Home() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-[#222631] bg-[#0c0d11] py-4 text-center text-xs text-slate-500">
+      <footer className="border-t border-[#293245] bg-[#13151f] py-4 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <p>ClipForge Studio • Video Clipping & Review Workspace</p>
           <p className="font-mono text-[11px] text-slate-600">

@@ -103,7 +103,7 @@ export default function ClipsView({
   return (
     <div className="space-y-5">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#222631]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#293245]">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-white">Review Queue & Generated Clips</h1>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -112,12 +112,12 @@ export default function ClipsView({
         </div>
 
         {/* Source Switcher */}
-        <div className="flex items-center bg-[#14161c] p-0.5 rounded-md border border-[#222631] shrink-0">
+        <div className="flex items-center bg-[#1a1e2b] p-0.5 rounded-md border border-[#293245] shrink-0">
           <button
             onClick={() => setSourceTab('real')}
             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
               sourceTab === 'real'
-                ? 'bg-[#222631] text-white shadow-sm'
+                ? 'bg-[#293245] text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -128,7 +128,7 @@ export default function ClipsView({
             onClick={() => setSourceTab('fixtures')}
             className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
               sourceTab === 'fixtures'
-                ? 'bg-[#222631] text-white shadow-sm'
+                ? 'bg-[#293245] text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -138,7 +138,7 @@ export default function ClipsView({
       </div>
 
       {/* Toolbar with Filters (from master) */}
-      <div className="p-3.5 rounded-lg bg-[#14161c] border border-[#222631] flex flex-col gap-3">
+      <div className="p-3.5 rounded-lg bg-[#1a1e2b] border border-[#293245] flex flex-col gap-3">
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           {/* Search */}
           <div className="relative w-full md:w-64">
@@ -150,7 +150,7 @@ export default function ClipsView({
               placeholder="Search title, VOD, or clip ID…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded bg-[#0c0d11] border border-[#222631] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#2563eb]"
+              className="w-full pl-8 pr-3 py-1.5 rounded bg-[#13151f] border border-[#293245] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#aab9c7]"
             />
           </div>
 
@@ -167,7 +167,7 @@ export default function ClipsView({
                 onClick={() => setStatusFilter(tab.id)}
                 className={`px-2.5 py-1 rounded text-xs font-medium transition-colors tabular-nums ${
                   statusFilter === tab.id
-                    ? 'bg-[#222631] text-white border border-[#2b3140]'
+                    ? 'bg-[#293245] text-white border border-[#4c5e6b]'
                     : 'text-slate-400 hover:text-slate-200 border border-transparent'
                 }`}
               >
@@ -183,7 +183,7 @@ export default function ClipsView({
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="px-2.5 py-1 rounded bg-[#0c0d11] border border-[#222631] text-xs text-slate-300 focus:outline-none"
+              className="px-2.5 py-1 rounded bg-[#13151f] border border-[#293245] text-xs text-slate-300 focus:outline-none"
             >
               <option value="score_desc">Highest Score</option>
               <option value="newest">Newest First</option>
@@ -194,7 +194,7 @@ export default function ClipsView({
         </div>
 
         {/* P1 Variant Filters & P2 Recommended Toggle (from master) */}
-        <div className="pt-2.5 border-t border-[#1d212b] flex items-center justify-between gap-3 flex-wrap text-xs">
+        <div className="pt-2.5 border-t border-[#293245] flex items-center justify-between gap-3 flex-wrap text-xs">
           <div className="flex items-center gap-1 flex-wrap">
             <span className="text-slate-500 text-[11px] mr-1">Variants:</span>
             {[
@@ -209,8 +209,8 @@ export default function ClipsView({
                 onClick={() => setTypeFilter(vf.id)}
                 className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
                   typeFilter === vf.id
-                    ? 'bg-[#1c2233] text-blue-300 border border-blue-500/40'
-                    : 'bg-[#0c0d11] text-slate-400 hover:text-slate-200 border border-[#1d212b]'
+                    ? 'bg-[#252b3d] text-blue-300 border border-blue-500/40'
+                    : 'bg-[#13151f] text-slate-400 hover:text-slate-200 border border-[#293245]'
                 }`}
               >
                 {vf.label}
@@ -223,7 +223,7 @@ export default function ClipsView({
               type="checkbox"
               checked={recommendedOnly}
               onChange={(e) => setRecommendedOnly(e.target.checked)}
-              className="rounded accent-[#2563eb]"
+              className="rounded accent-[#aab9c7]"
             />
             <span className="text-[11px] font-medium">★ Recommended Only</span>
           </label>
@@ -232,7 +232,7 @@ export default function ClipsView({
 
       {/* Grid of 9:16 Clips */}
       {sortedClips.length === 0 ? (
-        <div className="py-16 text-center rounded-lg bg-[#14161c] border border-[#222631] p-6 space-y-3">
+        <div className="py-16 text-center rounded-lg bg-[#1a1e2b] border border-[#293245] p-6 space-y-3">
           <div className="text-sm font-semibold text-white">No Clips Found</div>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             {searchQuery || statusFilter !== 'all' || typeFilter !== 'all' || recommendedOnly
@@ -241,7 +241,7 @@ export default function ClipsView({
           </p>
           <button
             onClick={() => setActiveView('generate')}
-            className="px-3.5 py-1.5 rounded bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium transition-colors"
+            className="px-3.5 py-1.5 rounded bg-[#aab9c7] hover:bg-[#e9ecee] text-white text-xs font-medium transition-colors"
           >
             Generate New Clips
           </button>
@@ -258,7 +258,7 @@ export default function ClipsView({
             return (
               <div
                 key={clip.id}
-                className="rounded-lg bg-[#14161c] border border-[#222631] hover:border-[#323849] overflow-hidden transition-colors flex flex-col"
+                className="rounded-lg bg-[#1a1e2b] border border-[#293245] hover:border-[#4c5e6b] overflow-hidden transition-colors flex flex-col"
               >
                 {/* 9:16 Container */}
                 <div className="relative aspect-[9/16] bg-black overflow-hidden flex items-center justify-center">
@@ -271,7 +271,7 @@ export default function ClipsView({
                     />
                   ) : (
                     <div className="text-center p-4 space-y-2">
-                      <div className="w-10 h-10 rounded-full bg-[#1c202a] border border-[#2b3140] flex items-center justify-center mx-auto text-slate-400">
+                      <div className="w-10 h-10 rounded-full bg-[#1e2333] border border-[#4c5e6b] flex items-center justify-center mx-auto text-slate-400">
                         <Play className="w-5 h-5 ml-0.5" />
                       </div>
                       <span className="text-[10px] font-mono text-slate-500 block">
@@ -282,7 +282,7 @@ export default function ClipsView({
 
                   {/* Score Tag Top Left */}
                   <div className="absolute top-2.5 left-2.5 z-10 flex flex-col gap-1 items-start">
-                    <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-black/80 text-slate-200 border border-[#2b3140] tabular-nums">
+                    <span className="px-2 py-0.5 rounded text-[11px] font-mono font-medium bg-black/80 text-slate-200 border border-[#4c5e6b] tabular-nums">
                       Score: {clip.score || '90/100'}
                     </span>
                     {clip.is_recommended && (
@@ -328,7 +328,7 @@ export default function ClipsView({
                     {/* P1 & P2 Intelligence tags (from master) */}
                     <div className="flex items-center gap-1 flex-wrap mt-2 text-[9px] font-mono">
                       {clip.variant && (
-                        <span className="px-1 py-0.2 rounded bg-[#1c202a] text-slate-300 border border-[#2b3140] uppercase">
+                        <span className="px-1 py-0.2 rounded bg-[#1e2333] text-slate-300 border border-[#4c5e6b] uppercase">
                           {clip.variant}
                         </span>
                       )}
@@ -351,12 +351,12 @@ export default function ClipsView({
                   </div>
 
                   {/* P4 Preset Render Action (from master) */}
-                  <div className="pt-2 border-t border-[#1d212b] space-y-1.5">
+                  <div className="pt-2 border-t border-[#293245] space-y-1.5">
                     <div className="flex items-center justify-between gap-1.5">
                       <select
                         value={currentPreset}
                         onChange={(e) => handlePresetChange(clip.id, e.target.value)}
-                        className="flex-1 px-1.5 py-1 rounded bg-[#0c0d11] border border-[#222631] text-[11px] text-slate-300"
+                        className="flex-1 px-1.5 py-1 rounded bg-[#13151f] border border-[#293245] text-[11px] text-slate-300"
                       >
                         <option value="tiktok">TikTok (9:16)</option>
                         <option value="youtube_shorts">YouTube Shorts</option>
@@ -367,7 +367,7 @@ export default function ClipsView({
                         <button
                           type="button"
                           onClick={() => handleTriggerRender(clip.id, currentPreset)}
-                          className="px-2 py-1 rounded bg-[#222631] hover:bg-[#2b3140] text-slate-200 text-xs font-medium transition-colors flex items-center gap-1"
+                          className="px-2 py-1 rounded bg-[#293245] hover:bg-[#4c5e6b] text-slate-200 text-xs font-medium transition-colors flex items-center gap-1"
                           title="Queue background render with selected preset"
                         >
                           <Cpu className="w-3 h-3 text-blue-400" />
@@ -383,7 +383,7 @@ export default function ClipsView({
                     <button
                       type="button"
                       onClick={() => setEditingClip && setEditingClip(clip)}
-                      className="w-full py-1.5 rounded text-xs font-semibold bg-[#1a1d24] hover:bg-[#222631] text-blue-300 hover:text-white border border-[#2b3140] transition-colors flex items-center justify-center gap-1"
+                      className="w-full py-1.5 rounded text-xs font-semibold bg-[#1a1d24] hover:bg-[#293245] text-blue-300 hover:text-white border border-[#4c5e6b] transition-colors flex items-center justify-center gap-1"
                     >
                       <Film className="w-3.5 h-3.5" />
                       <span>CapCut Studio Editor</span>
@@ -399,7 +399,7 @@ export default function ClipsView({
                         className={`flex-1 py-1 rounded text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500 ${
                           isRejected
                             ? 'bg-rose-950/50 text-rose-300 border-rose-900/50'
-                            : 'bg-[#1c202a] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border-[#2b3140]'
+                            : 'bg-[#1e2333] hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border-[#4c5e6b]'
                         }`}
                       >
                         {loadingAction === 'reject' ? '…' : 'Reject'}
@@ -413,7 +413,7 @@ export default function ClipsView({
                         className={`flex-1 py-1 rounded text-xs font-medium border transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500 ${
                           isApproved
                             ? 'bg-emerald-600 text-white border-emerald-500'
-                            : 'bg-[#1c202a] hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 border-[#2b3140]'
+                            : 'bg-[#1e2333] hover:bg-emerald-950/40 text-slate-300 hover:text-emerald-300 border-[#4c5e6b]'
                         }`}
                       >
                         {loadingAction === 'approve' ? '…' : isApproved ? 'Approved ✓' : 'Approve'}

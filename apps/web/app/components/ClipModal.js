@@ -436,9 +436,9 @@ export default function ClipModal({
       aria-label="CapCut Multi-Track Video & Caption Studio"
       className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md overscroll-contain select-none"
     >
-      <div className="relative w-full max-w-5xl h-[92vh] max-h-[900px] rounded-xl bg-[#0e1017] border border-[#222631] shadow-2xl flex flex-col overflow-hidden text-slate-100">
+      <div className="relative w-full max-w-5xl h-[92vh] max-h-[900px] rounded-xl bg-[#0e1017] border border-[#293245] shadow-2xl flex flex-col overflow-hidden text-slate-100">
         {/* Top Studio Bar */}
-        <div className="h-11 px-4 border-b border-[#222631] bg-[#12141d] flex items-center justify-between shrink-0">
+        <div className="h-11 px-4 border-b border-[#293245] bg-[#12141d] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 font-semibold text-xs text-white">
               <span className="w-2 h-2 rounded-full bg-cyan-400" />
@@ -448,7 +448,7 @@ export default function ClipModal({
               </span>
             </div>
 
-            <div className="h-3.5 w-px bg-[#222631]" />
+            <div className="h-3.5 w-px bg-[#293245]" />
 
             <div className="text-[11px] text-slate-400 font-mono tabular-nums">
               {clip.title || `Clip #${clip.id}`}
@@ -457,7 +457,7 @@ export default function ClipModal({
 
           <div className="flex items-center gap-3">
             {/* P5 Undo / Redo & Autosave */}
-            <div className="flex items-center gap-1 bg-[#141722] p-0.5 rounded border border-[#2b3140]">
+            <div className="flex items-center gap-1 bg-[#141722] p-0.5 rounded border border-[#4c5e6b]">
               <button
                 type="button"
                 onClick={handleUndo}
@@ -482,7 +482,7 @@ export default function ClipModal({
               {autosaveStatus}
             </span>
 
-            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#1a1e2a] text-slate-300 border border-[#2b3140] tabular-nums">
+            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-[#1a1e2a] text-slate-300 border border-[#4c5e6b] tabular-nums">
               Score: {clip.score || '90/100'}
             </span>
 
@@ -501,7 +501,7 @@ export default function ClipModal({
             <button
               onClick={onClose}
               aria-label="Close clip editor"
-              className="p-1 rounded bg-[#1a1e2a] hover:bg-[#252b3c] text-slate-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2563eb]"
+              className="p-1 rounded bg-[#1a1e2a] hover:bg-[#252b3c] text-slate-400 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#aab9c7]"
             >
               <X className="w-4 h-4" aria-hidden="true" />
             </button>
@@ -509,10 +509,10 @@ export default function ClipModal({
         </div>
 
         {/* Middle Stage: 9:16 Video Monitor (Left) & Layer Inspector (Right) */}
-        <div className="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden border-b border-[#222631]">
+        <div className="flex-1 min-h-0 flex flex-col sm:flex-row overflow-hidden border-b border-[#293245]">
           {/* Left: 9:16 Video Monitor Preview */}
-          <div className="w-full sm:w-[320px] lg:w-[360px] bg-[#08090d] p-3 flex flex-col items-center justify-center shrink-0 border-r border-[#222631] relative">
-            <div className="w-[185px] h-[330px] rounded-lg bg-black border border-[#222631] overflow-hidden relative shadow-2xl flex flex-col justify-between">
+          <div className="w-full sm:w-[320px] lg:w-[360px] bg-[#08090d] p-3 flex flex-col items-center justify-center shrink-0 border-r border-[#293245] relative">
+            <div className="w-[185px] h-[330px] rounded-lg bg-black border border-[#293245] overflow-hidden relative shadow-2xl flex flex-col justify-between">
               {clip.media_url ? (
                 <video
                   ref={videoRef}
@@ -546,14 +546,14 @@ export default function ClipModal({
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Auto (AI Smart Face)
                       </button>
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Manual Position
                       </button>
@@ -561,7 +561,7 @@ export default function ClipModal({
                   </div>
 
                   {cropMode === 'manual' && (
-                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                    <div className="space-y-2.5 p-2.5 bg-[#13151f] rounded-lg border border-[#293245]">
                       <div>
                         <div className="flex justify-between text-[11px] text-slate-400 mb-1">
                           <span>Horizontal Crop X:</span>
@@ -605,7 +605,7 @@ export default function ClipModal({
                           key={m}
                           type="button"
                           onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
-                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                         >
                           {m}
                         </button>
@@ -688,13 +688,13 @@ export default function ClipModal({
           <div className="flex-1 bg-[#12141d] p-4 flex flex-col justify-between overflow-y-auto">
             <div className="space-y-4">
               {/* Inspector Navigation Tabs */}
-              <div className="flex items-center gap-1 bg-[#0c0d11] p-1 rounded-md border border-[#222631]">
+              <div className="flex items-center gap-1 bg-[#13151f] p-1 rounded-md border border-[#293245]">
                 <button
                   type="button"
                   onClick={() => setActiveInspectorTab('caption')}
                   className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                     activeInspectorTab === 'caption'
-                      ? 'bg-[#222631] text-white shadow-sm'
+                      ? 'bg-[#293245] text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -707,7 +707,7 @@ export default function ClipModal({
                   onClick={() => setActiveInspectorTab('style')}
                   className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                     activeInspectorTab === 'style'
-                      ? 'bg-[#222631] text-white shadow-sm'
+                      ? 'bg-[#293245] text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -720,7 +720,7 @@ export default function ClipModal({
                   onClick={() => setActiveInspectorTab('reframe')}
                   className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                     activeInspectorTab === 'reframe'
-                      ? 'bg-[#222631] text-white shadow-sm'
+                      ? 'bg-[#293245] text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -733,7 +733,7 @@ export default function ClipModal({
                   onClick={() => setActiveInspectorTab('audio')}
                   className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                     activeInspectorTab === 'audio'
-                      ? 'bg-[#222631] text-white shadow-sm'
+                      ? 'bg-[#293245] text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -746,7 +746,7 @@ export default function ClipModal({
                   onClick={() => setActiveInspectorTab('export')}
                   className={`flex-1 py-1 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
                     activeInspectorTab === 'export'
-                      ? 'bg-[#222631] text-white shadow-sm'
+                      ? 'bg-[#293245] text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -779,7 +779,7 @@ export default function ClipModal({
                       value={activeCaption?.text || ''}
                       onChange={(e) => updateActiveText(e.target.value)}
                       placeholder="Type subtitle words here…"
-                      className="w-full p-2.5 rounded bg-[#0c0d11] border border-[#222631] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-sans leading-relaxed"
+                      className="w-full p-2.5 rounded bg-[#13151f] border border-[#293245] text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-sans leading-relaxed"
                     />
                   </div>
 
@@ -795,7 +795,7 @@ export default function ClipModal({
                         step="0.1"
                         value={activeCaption?.start || 0}
                         onChange={(e) => updateActiveTiming('start', e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded bg-[#0c0d11] border border-[#222631] text-xs text-white font-mono"
+                        className="w-full px-2.5 py-1.5 rounded bg-[#13151f] border border-[#293245] text-xs text-white font-mono"
                       />
                     </div>
                     <div>
@@ -808,7 +808,7 @@ export default function ClipModal({
                         step="0.1"
                         value={activeCaption?.end || 0}
                         onChange={(e) => updateActiveTiming('end', e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded bg-[#0c0d11] border border-[#222631] text-xs text-white font-mono"
+                        className="w-full px-2.5 py-1.5 rounded bg-[#13151f] border border-[#293245] text-xs text-white font-mono"
                       />
                     </div>
                   </div>
@@ -828,7 +828,7 @@ export default function ClipModal({
                     <button
                       type="button"
                       onClick={() => seekTo(activeCaption.start)}
-                      className="px-2.5 py-1 rounded bg-[#1c202a] text-slate-300 hover:text-white border border-[#2b3140] text-xs font-medium transition-colors"
+                      className="px-2.5 py-1 rounded bg-[#1e2333] text-slate-300 hover:text-white border border-[#4c5e6b] text-xs font-medium transition-colors"
                     >
                       Jump to Start
                     </button>
@@ -845,14 +845,14 @@ export default function ClipModal({
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Auto (AI Smart Face)
                       </button>
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Manual Position
                       </button>
@@ -860,7 +860,7 @@ export default function ClipModal({
                   </div>
 
                   {cropMode === 'manual' && (
-                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                    <div className="space-y-2.5 p-2.5 bg-[#13151f] rounded-lg border border-[#293245]">
                       <div>
                         <div className="flex justify-between text-[11px] text-slate-400 mb-1">
                           <span>Horizontal Crop X:</span>
@@ -904,7 +904,7 @@ export default function ClipModal({
                           key={m}
                           type="button"
                           onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
-                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                         >
                           {m}
                         </button>
@@ -955,7 +955,7 @@ export default function ClipModal({
                       <select
                         value={captionSize}
                         onChange={(e) => setCaptionSize(e.target.value)}
-                        className="w-full px-2 py-1.5 rounded bg-[#0c0d11] border border-[#222631] text-xs text-white"
+                        className="w-full px-2 py-1.5 rounded bg-[#13151f] border border-[#293245] text-xs text-white"
                       >
                         <option value="small">Small</option>
                         <option value="medium">Medium (Standard)</option>
@@ -968,7 +968,7 @@ export default function ClipModal({
                       <select
                         value={captionPosition}
                         onChange={(e) => setCaptionPosition(e.target.value)}
-                        className="w-full px-2 py-1.5 rounded bg-[#0c0d11] border border-[#222631] text-xs text-white"
+                        className="w-full px-2 py-1.5 rounded bg-[#13151f] border border-[#293245] text-xs text-white"
                       >
                         <option value="bottom_safe">Bottom Safe Zone</option>
                         <option value="center">Center</option>
@@ -1012,14 +1012,14 @@ export default function ClipModal({
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Auto (AI Smart Face)
                       </button>
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Manual Position
                       </button>
@@ -1027,7 +1027,7 @@ export default function ClipModal({
                   </div>
 
                   {cropMode === 'manual' && (
-                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                    <div className="space-y-2.5 p-2.5 bg-[#13151f] rounded-lg border border-[#293245]">
                       <div>
                         <div className="flex justify-between text-[11px] text-slate-400 mb-1">
                           <span>Horizontal Crop X:</span>
@@ -1071,7 +1071,7 @@ export default function ClipModal({
                           key={m}
                           type="button"
                           onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
-                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                         >
                           {m}
                         </button>
@@ -1126,8 +1126,8 @@ export default function ClipModal({
                           onClick={() => setExportRes(res)}
                           className={`p-2 rounded border text-xs font-medium transition-colors ${
                             exportRes === res
-                              ? 'bg-[#1c2233] border-blue-500 text-white'
-                              : 'bg-[#0c0d11] border-[#222631] text-slate-400 hover:text-slate-200'
+                              ? 'bg-[#252b3d] border-blue-500 text-white'
+                              : 'bg-[#13151f] border-[#293245] text-slate-400 hover:text-slate-200'
                           }`}
                         >
                           {res} {res === '1080p' ? '(Standard)' : ''}
@@ -1150,8 +1150,8 @@ export default function ClipModal({
                           onClick={() => setExportPlatform(p.id)}
                           className={`p-2 rounded border text-xs font-medium transition-colors ${
                             exportPlatform === p.id
-                              ? 'bg-[#1c2233] border-blue-500 text-white'
-                              : 'bg-[#0c0d11] border-[#222631] text-slate-400 hover:text-slate-200'
+                              ? 'bg-[#252b3d] border-blue-500 text-white'
+                              : 'bg-[#13151f] border-[#293245] text-slate-400 hover:text-slate-200'
                           }`}
                         >
                           {p.name}
@@ -1165,7 +1165,7 @@ export default function ClipModal({
                       type="button"
                       onClick={handleExport}
                       disabled={exporting}
-                      className="w-full py-2 rounded bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-semibold disabled:opacity-50 transition-colors"
+                      className="w-full py-2 rounded bg-[#aab9c7] hover:bg-[#e9ecee] text-white text-xs font-semibold disabled:opacity-50 transition-colors"
                     >
                       {exporting ? 'Rendering Package…' : exportDone ? 'Package Ready ✓' : 'Render Export Package'}
                     </button>
@@ -1182,14 +1182,14 @@ export default function ClipModal({
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('auto'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'auto' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Auto (AI Smart Face)
                       </button>
                       <button
                         type="button"
                         onClick={() => { pushUndo(); setCropMode('manual'); triggerAutosave(); }}
-                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#1c2233] border-cyan-400 text-white' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                        className={`p-2 rounded border font-medium ${cropMode === 'manual' ? 'bg-[#252b3d] border-cyan-400 text-white' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                       >
                         Manual Position
                       </button>
@@ -1197,7 +1197,7 @@ export default function ClipModal({
                   </div>
 
                   {cropMode === 'manual' && (
-                    <div className="space-y-2.5 p-2.5 bg-[#0c0d11] rounded-lg border border-[#222631]">
+                    <div className="space-y-2.5 p-2.5 bg-[#13151f] rounded-lg border border-[#293245]">
                       <div>
                         <div className="flex justify-between text-[11px] text-slate-400 mb-1">
                           <span>Horizontal Crop X:</span>
@@ -1241,7 +1241,7 @@ export default function ClipModal({
                           key={m}
                           type="button"
                           onClick={() => { pushUndo(); setLayoutMode(m); triggerAutosave(); }}
-                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#0c0d11] border-[#222631] text-slate-400'}`}
+                          className={`py-1.5 rounded border transition ${layoutMode === m ? 'bg-purple-950/80 border-purple-600 text-purple-200 font-bold' : 'bg-[#13151f] border-[#293245] text-slate-400'}`}
                         >
                           {m}
                         </button>
@@ -1285,7 +1285,7 @@ export default function ClipModal({
             </div>
 
             {/* Bottom Status / Short Rationale */}
-            <div className="pt-3 border-t border-[#222631] flex items-center justify-between text-[11px] text-slate-400">
+            <div className="pt-3 border-t border-[#293245] flex items-center justify-between text-[11px] text-slate-400">
               <span className="flex items-center gap-1.5 text-emerald-400 font-mono">
                 <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
                 QC Integrity: 1080x1920 H.264
@@ -1298,16 +1298,16 @@ export default function ClipModal({
         </div>
 
         {/* BOTTOM STAGE: CapCut Multi-Track Timeline */}
-        <div className="h-[210px] bg-[#0c0d11] flex flex-col shrink-0 select-none">
+        <div className="h-[210px] bg-[#13151f] flex flex-col shrink-0 select-none">
           {/* Timeline Toolbar */}
-          <div className="h-9 px-3 border-b border-[#222631] bg-[#12141d] flex items-center justify-between">
+          <div className="h-9 px-3 border-b border-[#293245] bg-[#12141d] flex items-center justify-between">
             {/* Playback Controls */}
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={togglePlay}
                 aria-label={isPlaying ? 'Pause' : 'Play'}
-                className="w-6 h-6 rounded bg-[#1c202a] hover:bg-[#252b3c] flex items-center justify-center text-slate-200 hover:text-white transition-colors"
+                className="w-6 h-6 rounded bg-[#1e2333] hover:bg-[#252b3c] flex items-center justify-center text-slate-200 hover:text-white transition-colors"
               >
                 {isPlaying ? (
                   <Pause className="w-3 h-3" aria-hidden="true" />
@@ -1329,7 +1329,7 @@ export default function ClipModal({
                 type="button"
                 onClick={handleSplitCaption}
                 title="Split subtitle at playhead (Scissors)"
-                className="px-2 py-1 rounded bg-[#1c202a] hover:bg-[#252b3c] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1 border border-[#2b3140] transition-colors"
+                className="px-2 py-1 rounded bg-[#1e2333] hover:bg-[#252b3c] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1 border border-[#4c5e6b] transition-colors"
               >
                 <Scissors className="w-3 h-3 text-cyan-400" aria-hidden="true" />
                 <span>Split Text</span>
@@ -1339,7 +1339,7 @@ export default function ClipModal({
                 type="button"
                 onClick={handleAddCaption}
                 title="Add subtitle chunk at playhead"
-                className="px-2 py-1 rounded bg-[#1c202a] hover:bg-[#252b3c] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1 border border-[#2b3140] transition-colors"
+                className="px-2 py-1 rounded bg-[#1e2333] hover:bg-[#252b3c] text-slate-300 hover:text-white text-xs font-medium flex items-center gap-1 border border-[#4c5e6b] transition-colors"
               >
                 <Plus className="w-3 h-3 text-emerald-400" aria-hidden="true" />
                 <span>+ Chunk</span>
@@ -1355,14 +1355,14 @@ export default function ClipModal({
           {/* Timeline Multi-Track Body */}
           <div className="flex-1 flex overflow-hidden">
             {/* Track Headers (Left Column) */}
-            <div className="w-24 bg-[#14161c] border-r border-[#222631] flex flex-col shrink-0 text-[10px] font-mono">
+            <div className="w-24 bg-[#1a1e2b] border-r border-[#293245] flex flex-col shrink-0 text-[10px] font-mono">
               {/* Ruler header gap */}
-              <div className="h-5 border-b border-[#222631] px-2 flex items-center text-slate-500">
+              <div className="h-5 border-b border-[#293245] px-2 flex items-center text-slate-500">
                 TIME
               </div>
 
               {/* T1 Track Header */}
-              <div className="h-14 border-b border-[#222631] px-2 flex flex-col justify-center gap-0.5">
+              <div className="h-14 border-b border-[#293245] px-2 flex flex-col justify-center gap-0.5">
                 <div className="flex items-center gap-1 text-cyan-300 font-bold">
                   <Type className="w-3 h-3" aria-hidden="true" />
                   <span>T1 TEXT</span>
@@ -1384,10 +1384,10 @@ export default function ClipModal({
             <div
               ref={timelineRef}
               onClick={handleTimelineClick}
-              className="flex-1 relative overflow-hidden bg-[#0c0d11] cursor-pointer flex flex-col"
+              className="flex-1 relative overflow-hidden bg-[#13151f] cursor-pointer flex flex-col"
             >
               {/* Time Ruler (Seconds markers) */}
-              <div className="h-5 border-b border-[#222631] bg-[#101217] relative select-none flex items-center">
+              <div className="h-5 border-b border-[#293245] bg-[#101217] relative select-none flex items-center">
                 {Array.from({ length: Math.ceil(totalDuration) + 1 }).map((_, i) => {
                   const percent = (i / totalDuration) * 100;
                   if (percent > 100) return null;
@@ -1397,7 +1397,7 @@ export default function ClipModal({
                       className="absolute top-0 bottom-0 flex flex-col items-start"
                       style={{ left: `${percent}%` }}
                     >
-                      <div className="h-2 w-px bg-[#2b3140]" />
+                      <div className="h-2 w-px bg-[#4c5e6b]" />
                       {i % 2 === 0 && (
                         <span className="text-[9px] font-mono text-slate-500 -ml-2 -mt-0.5">
                           {i}s
@@ -1409,7 +1409,7 @@ export default function ClipModal({
               </div>
 
               {/* Track T1: Subtitle Chunks Layer */}
-              <div className="h-14 border-b border-[#222631] bg-[#0c0d11] relative p-1.5 flex items-center">
+              <div className="h-14 border-b border-[#293245] bg-[#13151f] relative p-1.5 flex items-center">
                 {captions.map((chunk) => {
                   const left = (chunk.start / totalDuration) * 100;
                   const width = ((chunk.end - chunk.start) / totalDuration) * 100;
@@ -1440,7 +1440,7 @@ export default function ClipModal({
               </div>
 
               {/* Track V1: Video Layer Strip with In/Out Bounds */}
-              <div className="h-16 bg-[#0c0d11] relative p-1.5 flex items-center">
+              <div className="h-16 bg-[#13151f] relative p-1.5 flex items-center">
                 {/* Active Video Region */}
                 <div
                   className="absolute top-1.5 bottom-1.5 rounded bg-gradient-to-r from-[#172033] via-[#1c2840] to-[#172033] border border-[#2b3e63] flex items-center justify-between px-2 overflow-hidden shadow-inner"
@@ -1483,13 +1483,13 @@ export default function ClipModal({
         </div>
 
         {/* Action Decision Footer Bar */}
-        <div className="h-12 px-4 border-t border-[#222631] bg-[#12141d] flex items-center justify-between shrink-0">
+        <div className="h-12 px-4 border-t border-[#293245] bg-[#12141d] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             {clip.media_url && (
               <a
                 href={clip.media_url}
                 download
-                className="px-3 py-1.5 rounded bg-[#1c202a] hover:bg-[#252b3c] text-slate-200 text-xs font-medium border border-[#2b3140] transition-colors inline-flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded bg-[#1e2333] hover:bg-[#252b3c] text-slate-200 text-xs font-medium border border-[#4c5e6b] transition-colors inline-flex items-center gap-1.5"
               >
                 <Download className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Download MP4</span>
