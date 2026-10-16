@@ -17,20 +17,105 @@ from services.render.hyperframes_models import (
 )
 
 
-def extract_indonesian_viral_hook(clip: Dict[str, Any], clean_title: str) -> Dict[str, Any]:
-    """Generates structured Indonesian viral hook parts matching the stacked creator layout:
+def extract_indonesian_viral_hook(
+    clip: Dict[str, Any],
+    clean_title: str,
+    transcript_segments: Optional[List[Any]] = None,
+) -> Dict[str, Any]:
+    """Generates structured Indonesian viral hook parts directly from clip dialogue:
     - top_tag (black brush box with white text)
     - badge_tag (red badge with white text)
     - highlight_text (bright yellow brush box with black text)
     - sub_text (white brush box with black text)
-    - punchline (giant neon green bold text)
+    - punchline (giant neon green bold text without excessive glow)
     """
+    import re
     raw_str = (clean_title + " " + str(clip.get("title", "")) + " " + str(clip.get("vod", ""))).lower()
+    uploader = str(clip.get("uploader", "")).upper()
 
-    if any(k in raw_str for k in ("meme", "coin", "4 miliar", "miliar", "cuan", "investasi", "kripto", "crypto", "bull", "market", "financial")):
-        top = "BEVAN" if "bevan" in raw_str else ("TIMOTHY" if "timothy" in raw_str else "INVESTOR")
+    # Detect speaker name
+    if "timothy" in raw_str:
+        speaker_tag = "TIMOTHY"
+    elif "bevan" in raw_str:
+        speaker_tag = "BEVAN"
+    elif "leon" in raw_str:
+        speaker_tag = "LEON"
+    elif uploader and uploader not in ("CREATOR", "UNKNOWN STREAMER"):
+        speaker_tag = uploader.split()[0].upper()[:12]
+    else:
+        speaker_tag = "VIRAL"
+
+    # 1. Discover most exciting dialogue directly from this clip's spoken segments
+    selected_dialogue = None
+    if transcript_segments:
+        c_start = float(clip.get("start_time", 0.0))
+        dur_val = float(str(clip.get("duration", "60.0")).replace("s", ""))
+        c_end = float(clip.get("end_time", c_start + dur_val))
+        clip_segs = [s for s in transcript_segments if getattr(s, "end", 0.0) > c_start and getattr(s, "start", 0.0) < c_end]
+
+        VIRAL_KEYWORDS = {
+            "miliar": 25, "miliaran": 25, "juta": 15, "cuan": 18, "untung": 15, "rugi": 16,
+            "kaya": 16, "miskin": 14, "modal": 14, "kripto": 14, "crypto": 14, "trump": 18,
+            "coin": 15, "meme": 16, "gila": 18, "parah": 16, "palsu": 20, "bohong": 18,
+            "kaget": 16, "diusir": 20, "security": 20, "recall": 20, "ternyata": 16, "bocorin": 18,
+            "rahasia": 18, "beneran": 16, "parah banget": 22, "onchain": 16, "wallet": 16,
+        }
+        best_score = -100
+        for i, s in enumerate(clip_segs):
+            txt = getattr(s, "text", "").strip()
+            clean_txt = re.sub(r"[\r\n\t]+", " ", txt).strip()
+            w_list = clean_txt.split()
+            if len(w_list) < 2:
+                continue
+            sc = 0
+            low = clean_txt.lower()
+            for kw, pts in VIRAL_KEYWORDS.items():
+                if kw in low:
+                    sc += pts
+            if i < 6:
+                sc += 15
+            if 3 <= len(w_list) <= 10:
+                sc += 12
+            elif len(w_list) > 14:
+                sc -= 6
+            if sc > best_score:
+                best_score = sc
+                selected_dialogue = clean_txt
+
+    if selected_dialogue:
+        words = [w.strip(".,!?:;\"'()[]") for w in selected_dialogue.split() if len(w.strip(".,!?:;\"'()[]")) > 0]
+        filler = {"di", "e", "eh", "lah", "sih", "gitu", "terus", "gua", "lu", "itu", "yang", "ada", "basically"}
+        content_words = [w for w in words if w.lower() not in filler]
+        if not content_words:
+            content_words = words
+
+        if len(content_words) >= 4:
+            highlight = " ".join(content_words[:2]).upper()
+            sub = " ".join(content_words[2:5]).upper()
+        elif len(content_words) >= 2:
+            highlight = " ".join(content_words[:2]).upper()
+            sub = "BONGKAR FAKTA NYATA"
+        else:
+            highlight = content_words[0].upper()
+            sub = "LANGSUNG DARI PEMBICARA"
+
+        badge = "NGAKU SENDIRI" if any(w in selected_dialogue.lower() for w in ("ngaku", "palsu", "gila")) else "BOCORIN RAHASIA"
+        punchline = "PARAH BANGET!" if any(w in selected_dialogue.lower() for w in ("palsu", "gila", "parah")) else "NEXT BULL RUN!"
+
         return {
-            "top_tag": top,
+            "top_tag": speaker_tag,
+            "badge_tag": badge,
+            "highlight_text": highlight[:22],
+            "sub_text": sub[:24],
+            "punchline": punchline,
+            "intro_blur_grayscale": True,
+            "intro_duration": 2.2,
+        }
+
+    # Fallback to metadata
+    if any(k in raw_str for k in ("meme", "coin", "4 miliar", "miliar", "cuan", "investasi", "kripto", "crypto", "bull", "market", "financial")):
+        return {
+            "top_tag": speaker_tag,
             "badge_tag": "BOCORIN RAHASIA",
             "highlight_text": "CUAN 4 MILIAR",
             "sub_text": "DARI MEME COIN",
@@ -48,24 +133,15 @@ def extract_indonesian_viral_hook(clip: Dict[str, Any], clean_title: str) -> Dic
             "intro_blur_grayscale": True,
             "intro_duration": 2.2,
         }
-    elif any(k in raw_str for k in ("chess", "catur", "gotham", "rozman")):
-        return {
-            "top_tag": "GOTHAMCHESS",
-            "badge_tag": "TAKTIK GILA",
-            "highlight_text": "CHESS 3.0",
-            "sub_text": "LAWAN TERTIPU",
-            "punchline": "AUTO CHECKMATE!",
-            "intro_blur_grayscale": True,
-            "intro_duration": 2.2,
-        }
     else:
         words = [w for w in clean_title.upper().split() if w not in ("HIGHLIGHT", "#1", "#2", "#3", "#4", "#5")]
-        h_main = " ".join(words[:3]) if len(words) >= 3 else (clean_title.upper() or "RAHASIA BESAR")
+        h_main = " ".join(words[:2]) if len(words) >= 2 else (clean_title.upper() or "RAHASIA BESAR")
+        h_sub = " ".join(words[2:5]) if len(words) > 2 else "WAJIB TAHU"
         return {
-            "top_tag": "VIRAL",
-            "badge_tag": "WAJIB TAHU",
-            "highlight_text": h_main[:24],
-            "sub_text": "JANGAN KETINGGALAN",
+            "top_tag": speaker_tag,
+            "badge_tag": "WAJIB NONTON",
+            "highlight_text": h_main[:22],
+            "sub_text": h_sub[:24],
             "punchline": "CUAN MAKSIMAL!",
             "intro_blur_grayscale": True,
             "intro_duration": 2.2,
@@ -95,7 +171,7 @@ def generate_initial_composition(
     if not clean_title or len(clean_title) < 4:
         clean_title = "CANVAS HIGHLIGHT"
 
-    viral_hook_data = extract_indonesian_viral_hook(clip, clean_title)
+    viral_hook_data = extract_indonesian_viral_hook(clip, clean_title, transcript_segments=transcript_segments)
 
     # Auto-select template based on detected speakers and content
     layout_mode = str(clip.get("layout_mode", "TRACK")).upper()

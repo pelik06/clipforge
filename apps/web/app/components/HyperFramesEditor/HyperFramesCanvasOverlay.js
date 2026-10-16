@@ -45,29 +45,29 @@ export default function HyperFramesCanvasOverlay({
           }}
         >
           {hookLayer.data?.highlight_text ? (
-            <div className="flex flex-col items-center gap-1 select-none pointer-events-none">
+            <div className="flex flex-col items-center gap-1.5 select-none pointer-events-none">
               {/* Row 1 */}
-              <div className="flex items-center gap-1">
-                <span className="bg-black text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider rotate-[-2deg] shadow border border-stone-800">
+              <div className="flex items-center gap-1.5">
+                <span className="bg-black text-white px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider rotate-[-2deg] shadow-lg border border-stone-800">
                   {hookLayer.data.top_tag || 'VIRAL'}
                 </span>
-                <span className="bg-[#D90429] text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider rotate-[1.5deg] shadow">
+                <span className="bg-[#D90429] text-white px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider rotate-[1.5deg] shadow-lg">
                   {hookLayer.data.badge_tag || 'BOCORIN RAHASIA'}
                 </span>
               </div>
               {/* Row 2: Yellow Box */}
-              <div className="bg-[#FFE500] text-black px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-tight shadow rotate-[-1deg]">
+              <div className="bg-[#FFE500] text-black px-3.5 py-1 rounded text-[14px] font-black uppercase tracking-tight shadow-xl rotate-[-1deg] text-center leading-tight">
                 {hookLayer.data.highlight_text}
               </div>
               {/* Row 3: White Box */}
               {hookLayer.data.sub_text && (
-                <div className="bg-white text-black px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide shadow rotate-[1deg]">
+                <div className="bg-white text-black px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wide shadow-md rotate-[1deg] text-center">
                   {hookLayer.data.sub_text}
                 </div>
               )}
-              {/* Row 4: Neon Green */}
+              {/* Row 4: Neon Green (No excessive glow, crisp solid shadow) */}
               {hookLayer.data.punchline && (
-                <div className="text-[#39FF14] text-[14px] font-black uppercase tracking-tight drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]">
+                <div className="text-[#39FF14] text-[18px] font-black uppercase tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] leading-tight text-center">
                   {hookLayer.data.punchline}
                 </div>
               )}

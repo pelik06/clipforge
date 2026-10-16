@@ -201,8 +201,10 @@ class HyperframesCompositionBuilder:
                 sub_str = str(sub_text or "MODAL KECIL").upper()
                 punchline_str = str(punchline or "NEXT BULL RUN!").upper()
 
+                h_title = h_data.get("title", "VIRAL MOMENT")
                 hook_html_parts.append(f"""
-      <div id="{h_layer.id}" class="clip viral-hook-container" data-start="{h_layer.start:.2f}" data-duration="{intro_dur:.2f}" data-track-index="{h_layer.z_index}">
+      <div id="{h_layer.id}" class="clip viral-hook-container" data-start="{h_layer.start:.2f}" data-duration="{intro_dur:.2f}" data-track-index="{h_layer.z_index}" data-title="{h_title}">
+        <span class="hook-full-title" style="display:none;">{h_title}</span>
         <div class="hook-row-1">
           <div class="hook-brush-black"><span>{top_tag_str}</span></div>
           <div class="hook-badge-red"><span>{badge_tag_str}</span></div>
@@ -343,11 +345,11 @@ class HyperframesCompositionBuilder:
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 960px;
+        width: 1040px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 16px;
+        gap: 18px;
         z-index: 15;
         pointer-events: none;
       }}
@@ -355,71 +357,73 @@ class HyperframesCompositionBuilder:
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 16px;
+        gap: 18px;
       }}
       .hook-brush-black {{
         background: #000000;
         color: #FFFFFF;
-        padding: 10px 32px;
-        border-radius: 4px;
+        padding: 12px 38px;
+        border-radius: 6px;
         font-family: 'Anton', Impact, sans-serif;
-        font-size: 58px;
+        font-size: 68px;
         font-weight: 900;
         text-transform: uppercase;
         transform: rotate(-2deg);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.85);
-        border: 2px solid #222222;
+        box-shadow: 0 14px 32px rgba(0,0,0,0.9);
+        border: 3px solid #222222;
         letter-spacing: 0.02em;
       }}
       .hook-badge-red {{
         background: #D90429;
         color: #FFFFFF;
-        padding: 8px 24px;
+        padding: 10px 28px;
         border-radius: 8px;
         font-family: 'Anton', Impact, sans-serif;
-        font-size: 38px;
+        font-size: 46px;
         font-weight: 900;
         text-transform: uppercase;
         transform: rotate(1.5deg);
-        box-shadow: 0 8px 24px rgba(217, 4, 41, 0.6);
+        box-shadow: 0 10px 28px rgba(0,0,0,0.7);
         line-height: 1.1;
         letter-spacing: 0.02em;
       }}
       .hook-brush-yellow {{
         background: #FFE500;
         color: #000000;
-        padding: 14px 44px;
-        border-radius: 6px;
+        padding: 18px 54px;
+        border-radius: 8px;
         font-family: 'Anton', Impact, sans-serif;
-        font-size: 76px;
+        font-size: 94px;
         font-weight: 900;
         text-transform: uppercase;
         letter-spacing: -0.02em;
         transform: rotate(-1deg);
-        box-shadow: 0 12px 36px rgba(0,0,0,0.75);
+        box-shadow: 0 16px 40px rgba(0,0,0,0.85);
+        text-align: center;
       }}
       .hook-brush-white {{
         background: #FFFFFF;
         color: #000000;
-        padding: 8px 30px;
+        padding: 10px 36px;
         border-radius: 6px;
         font-family: 'Montserrat', sans-serif;
-        font-size: 42px;
+        font-size: 52px;
         font-weight: 900;
         text-transform: uppercase;
         transform: rotate(1deg);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.75);
+        text-align: center;
       }}
       .hook-neon-green {{
         color: #39FF14;
         font-family: 'Anton', Impact, sans-serif;
-        font-size: 104px;
+        font-size: 128px;
         font-weight: 900;
         text-transform: uppercase;
         letter-spacing: -0.03em;
-        text-shadow: 0 0 24px rgba(57, 255, 20, 0.85), 0 4px 20px #000000;
+        text-shadow: 0 8px 0px #000000, 0 16px 28px rgba(0,0,0,0.9);
         text-align: center;
-        line-height: 1.0;
+        line-height: 0.95;
       }}
       .hook-banner {{
         position: absolute;
