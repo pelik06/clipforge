@@ -40,6 +40,7 @@ class EditorStateManager:
         # Parse captions from transcript segments if provided
         captions: List[CaptionSegment] = []
         if transcript_segments:
+            raw_caps = []
             for s in transcript_segments:
                 s_start = getattr(s, "start", 0.0)
                 s_end = getattr(s, "end", 0.0)
@@ -48,15 +49,24 @@ class EditorStateManager:
                     rel_s = max(0.0, round(s_start - src_start, 3))
                     rel_e = min(dur, round(s_end - src_start, 3))
                     if rel_e > rel_s:
-                        captions.append(
-                            CaptionSegment(
-                                id=f"cap_{uuid.uuid4().hex[:6]}",
-                                start=rel_s,
-                                end=rel_e,
-                                text=getattr(s, "text", "").strip(),
-                            )
-                        )
+                        raw_caps.append((rel_s, rel_e, getattr(s, "text", "").strip()))
 
+            raw_caps.sort(key=lambda x: x[0])
+            last_end = 0.0
+            for rel_s, rel_e, text in raw_caps:
+                c_start = max(last_end, rel_s)
+                c_end = max(c_start + 0.1, rel_e)
+                if c_start < dur and c_end > c_start:
+                    c_clamped_end = round(min(dur, c_end), 3)
+                    captions.append(
+                        CaptionSegment(
+                            id=f"cap_{uuid.uuid4().hex[:6]}",
+                            start=round(c_start, 3),
+                            end=c_clamped_end,
+                            text=text,
+                        )
+                    )
+                    last_end = c_clamped_end
         ai_suggestions = {
             "start_time": src_start,
             "end_time": src_end,

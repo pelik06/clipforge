@@ -562,6 +562,44 @@ def execute_job_pipeline_sync(
             if job_cfg.caption_preset == "no_captions":
                 if reframe_path.resolve() != cand_final.resolve():
                     cand_final.write_bytes(reframe_path.read_bytes())
+            elif job_cfg.caption_preset == "hyperframes":
+                hf_rendered = False
+                try:
+                    from services.render.hyperframes_templates import generate_initial_composition
+                    from services.render.hyperframes_composition import HyperframesCompositionBuilder
+                    from services.render.hyperframes_runner import HyperframesRunner
+
+                    c_dict = {
+                        "id": f"{job_id}_clip_{idx}",
+                        "title": cand.reasons[0] if (hasattr(cand, "reasons") and cand.reasons) else "HIGHLIGHT MOMENT",
+                        "duration": f"{cand.duration:.1f}s",
+                        "start_time": 0.0,
+                        "end_time": cand.duration,
+                        "layout_mode": getattr(cand, "layout_mode", "TRACK") or "TRACK",
+                    }
+                    c_segs = [s for s in transcript_segments if s.end > cand.start and s.start < cand.end]
+                    hf_comp = generate_initial_composition(c_dict, transcript_segments=c_segs)
+                    hf_comp.duration = cand.duration
+
+                    hf_proj = work_dir / f"hf_{job_id}_{idx}"
+                    builder = HyperframesCompositionBuilder()
+                    builder.build_from_composition(hf_proj, reframe_path, hf_comp)
+                    runner = HyperframesRunner(quality="draft", fps=30)
+                    h_res = runner.render(hf_proj, cand_final, quality="draft")
+                    if h_res.success and cand_final.exists() and cand_final.stat().st_size > 0:
+                        hf_rendered = True
+                except Exception as hf_err:
+                    logger.warning(f"HyperFrames direct render failed for clip {idx}: {hf_err}")
+
+                if not hf_rendered and transcript_segments:
+                    cr.render(
+                        transcript_segments=transcript_segments,
+                        video_path=str(reframe_path),
+                        output_path=str(cand_final),
+                        config=job_cfg,
+                        clip_start=cand.start,
+                        clip_end=cand.end,
+                    )
             elif transcript_segments:
                 clip_segments = None
                 try:

@@ -216,11 +216,11 @@ export default function ClipModal({
             if (st.audio) {
               setVolume(st.audio.volume !== undefined ? st.audio.volume : 1.0);
               setIsMuted(Boolean(st.audio.mute));
-              if (st.user_overrides?.composition) {
-                setComposition(st.user_overrides.composition);
-              } else if (clip.composition) {
-                setComposition(clip.composition);
-              }
+            }
+            if (st.user_overrides?.composition) {
+              setComposition(st.user_overrides.composition);
+            } else if (clip.composition) {
+              setComposition(clip.composition);
             }
           }
         }

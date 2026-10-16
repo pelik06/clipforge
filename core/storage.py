@@ -170,6 +170,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
             "face_size_score": "REAL DEFAULT NULL",
             "boundary_adjustment": "TEXT DEFAULT '{}'",
             "quality_flags": "TEXT DEFAULT '[]'",
+            "composition_json": "TEXT DEFAULT NULL",
         }
         for col_name, col_def in clip_column_defs.items():
             if col_name not in existing_clip_cols:
@@ -281,10 +282,10 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 speaker_track_id, speaker_confidence, layout_mode, audio_reaction, audio_reaction_confidence,
                 variant, parent_moment_id, ranking, is_recommended, quality_breakdown, why_this_clip, recommendation_reasons,
                 context_score, bridge_score, hook_type, payoff_type, context_completeness, topic_family, topic_label,
-                visual_quality_score, headroom_score, face_size_score, boundary_adjustment, quality_flags
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                visual_quality_score, headroom_score, face_size_score, boundary_adjustment, quality_flags,
+                composition_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
-                status = excluded.status,
                 reviewed_at = excluded.reviewed_at,
                 render_status = excluded.render_status,
                 render_notice = excluded.render_notice,
@@ -313,7 +314,8 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 headroom_score = COALESCE(excluded.headroom_score, clips.headroom_score),
                 face_size_score = COALESCE(excluded.face_size_score, clips.face_size_score),
                 boundary_adjustment = COALESCE(excluded.boundary_adjustment, clips.boundary_adjustment),
-                quality_flags = COALESCE(excluded.quality_flags, clips.quality_flags);
+                quality_flags = COALESCE(excluded.quality_flags, clips.quality_flags),
+                composition_json = COALESCE(excluded.composition_json, clips.composition_json);
             """,
             (
                 clip["id"],
@@ -359,6 +361,7 @@ def save_clip(clip: Dict[str, Any], db_path: Optional[Path] = None) -> Dict[str,
                 clip.get("face_size_score"),
                 json.dumps(clip.get("boundary_adjustment", {})),
                 json.dumps(clip.get("quality_flags", [])),
+                json.dumps(clip.get("composition")) if clip.get("composition") else None,
             ),
         )
         conn.commit()
@@ -722,4 +725,5 @@ def _format_clip_row(row: sqlite3.Row) -> Dict[str, Any]:
         "face_size_score": float(row["face_size_score"]) if "face_size_score" in row.keys() and row["face_size_score"] is not None else None,
         "boundary_adjustment": json.loads(row["boundary_adjustment"]) if "boundary_adjustment" in row.keys() and row["boundary_adjustment"] else {},
         "quality_flags": json.loads(row["quality_flags"]) if "quality_flags" in row.keys() and row["quality_flags"] else [],
+        "composition": json.loads(row["composition_json"]) if "composition_json" in row.keys() and row["composition_json"] else None,
     }
