@@ -142,6 +142,16 @@ class HyperframesCompositionBuilder:
         }
         caption_box_pos = pos_styles.get(caption_pos, pos_styles["bottom_safe"])
 
+        # Check if viral stacked Indonesian hook is used
+        has_intro_blur = False
+        intro_dur = 2.2
+        for h_l in hook_layers:
+            h_d = h_l.data or {}
+            if h_d.get("top_tag") or h_d.get("highlight_text") or h_d.get("punchline") or h_d.get("intro_blur_grayscale"):
+                has_intro_blur = True
+                intro_dur = float(h_d.get("intro_duration", 2.2))
+                break
+
         # Group words into 3-4 word phrases
         phrases = []
         raw_captions = composition.captions or []
@@ -151,13 +161,16 @@ class HyperframesCompositionBuilder:
                 chunk = raw_captions[i : i + chunk_size]
                 p_start = max(0.0, float(chunk[0].get("start", 0.0)))
                 p_end = min(duration, float(chunk[-1].get("end", 0.0)) + 0.15)
+                if has_intro_blur and p_start < intro_dur:
+                    if p_end <= intro_dur:
+                        continue
+                    p_start = intro_dur
                 if p_end > p_start:
                     phrases.append({
                         "start": p_start,
                         "duration": max(0.4, p_end - p_start),
                         "words": chunk,
                     })
-
         phrases_html = []
         gsap_calls = []
 
@@ -167,34 +180,75 @@ class HyperframesCompositionBuilder:
 
         # Hook layers rendering and animation
         hook_html_parts = []
+        has_intro_blur = False
+        intro_dur = 2.2
+
         for h_layer in hook_layers:
             h_data = h_layer.data or {}
-            h_title = h_data.get("title", "VIRAL MOMENT")
-            h_badge = h_data.get("badge", "★ HIGHLIGHT")
-            h_bg = h_data.get("bg_color", "rgba(26, 30, 43, 0.94)")
-            h_border = h_data.get("border_color", "#293245")
-            h_text = h_data.get("text_color", "#E9ECEE")
+            top_tag = h_data.get("top_tag")
+            badge_tag = h_data.get("badge_tag")
+            highlight_text = h_data.get("highlight_text")
+            sub_text = h_data.get("sub_text")
+            punchline = h_data.get("punchline")
+            is_viral_stacked = bool(top_tag or highlight_text or punchline)
 
-            h_anim = h_layer.animation_in.get("type", "spring")
-            h_dur = h_layer.duration
+            if is_viral_stacked:
+                has_intro_blur = bool(h_data.get("intro_blur_grayscale", True))
+                intro_dur = float(h_data.get("intro_duration", 2.2))
+                top_tag_str = str(top_tag or "VIRAL").upper()
+                badge_tag_str = str(badge_tag or "BOCORIN RAHASIA").upper()
+                highlight_str = str(highlight_text or "CUAN 4 MILIAR").upper()
+                sub_str = str(sub_text or "MODAL KECIL").upper()
+                punchline_str = str(punchline or "NEXT BULL RUN!").upper()
 
-            hook_html_parts.append(f"""
+                hook_html_parts.append(f"""
+      <div id="{h_layer.id}" class="clip viral-hook-container" data-start="{h_layer.start:.2f}" data-duration="{intro_dur:.2f}" data-track-index="{h_layer.z_index}">
+        <div class="hook-row-1">
+          <div class="hook-brush-black"><span>{top_tag_str}</span></div>
+          <div class="hook-badge-red"><span>{badge_tag_str}</span></div>
+        </div>
+        <div class="hook-row-2">
+          <div class="hook-brush-yellow"><span>{highlight_str}</span></div>
+        </div>
+        <div class="hook-row-3">
+          <div class="hook-brush-white"><span>{sub_str}</span></div>
+        </div>
+        <div class="hook-row-4">
+          <div class="hook-neon-green"><span>{punchline_str}</span></div>
+        </div>
+      </div>""")
+
+                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ scale: 0.65, opacity: 0, y: 50 }}, {{ scale: 1.0, opacity: 1, y: 0, duration: 0.55, ease: "back.out(2.0)" }}, {h_layer.start:.2f});')
+                exit_t = max(0.4, intro_dur - 0.4)
+                gsap_calls.append(f'tl.to("#{h_layer.id}", {{ scale: 0.85, opacity: 0, y: -40, duration: 0.4, ease: "power2.in" }}, {exit_t:.2f});')
+            else:
+                h_title = h_data.get("title", "VIRAL MOMENT")
+                h_badge = h_data.get("badge", "★ HIGHLIGHT")
+                h_bg = h_data.get("bg_color", "rgba(26, 30, 43, 0.94)")
+                h_border = h_data.get("border_color", "#293245")
+                h_text = h_data.get("text_color", "#E9ECEE")
+
+                h_anim = h_layer.animation_in.get("type", "spring")
+                h_dur = h_layer.duration
+
+                hook_html_parts.append(f"""
       <div id="{h_layer.id}" class="clip hook-banner" data-start="{h_layer.start:.2f}" data-duration="{h_dur:.2f}" data-track-index="{h_layer.z_index}"
            style="background: {h_bg}; border-color: {h_border}; opacity: {h_layer.opacity}; transform: scale({h_layer.scale});">
         <span class="hook-badge">{h_badge}</span>
         <span class="hook-title" style="color: {h_text};">{h_title}</span>
       </div>""")
 
-            if h_anim == "spring":
-                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ y: -60, opacity: 0 }}, {{ y: 0, opacity: 1, duration: 0.6, ease: "back.out(1.7)" }}, {h_layer.start:.2f});')
-            elif h_anim == "pop":
-                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ scale: 0.7, opacity: 0 }}, {{ scale: 1, opacity: 1, duration: 0.4, ease: "power2.out" }}, {h_layer.start:.2f});')
-            else:
-                gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ opacity: 0, y: -30 }}, {{ opacity: 1, y: 0, duration: 0.5 }}, {h_layer.start:.2f});')
+                if h_anim == "spring":
+                    gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ y: -60, opacity: 0 }}, {{ y: 0, opacity: 1, duration: 0.6, ease: "back.out(1.7)" }}, {h_layer.start:.2f});')
+                elif h_anim == "pop":
+                    gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ scale: 0.7, opacity: 0 }}, {{ scale: 1, opacity: 1, duration: 0.4, ease: "power2.out" }}, {h_layer.start:.2f});')
+                else:
+                    gsap_calls.append(f'tl.fromTo("#{h_layer.id}", {{ opacity: 0, y: -30 }}, {{ opacity: 1, y: 0, duration: 0.5 }}, {h_layer.start:.2f});')
 
-            # Exit animation
-            gsap_calls.append(f'tl.to("#{h_layer.id}", {{ opacity: 0, y: -20, duration: 0.4 }}, {max(0.0, h_layer.end - 0.4):.2f});')
+                gsap_calls.append(f'tl.to("#{h_layer.id}", {{ opacity: 0, y: -20, duration: 0.4 }}, {max(0.0, h_layer.end - 0.4):.2f});')
 
+        if has_intro_blur:
+            gsap_calls.append(f'tl.to(".bg-video", {{ filter: "blur(0px) grayscale(0%) contrast(100%) brightness(1.0)", duration: 0.6, ease: "power2.out" }}, {max(0.2, intro_dur - 0.4):.2f});')
         # Person layers rendering and animation
         person_html_parts = []
         for p_layer in person_layers:
@@ -282,6 +336,90 @@ class HyperframesCompositionBuilder:
         width: {w_canvas}px;
         height: {h_canvas}px;
         object-fit: cover;
+        { "filter: blur(8px) grayscale(85%) contrast(115%) brightness(0.65);" if has_intro_blur else "" }
+      }}
+      .viral-hook-container {{
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 960px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        z-index: 15;
+        pointer-events: none;
+      }}
+      .hook-row-1 {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+      }}
+      .hook-brush-black {{
+        background: #000000;
+        color: #FFFFFF;
+        padding: 10px 32px;
+        border-radius: 4px;
+        font-family: 'Anton', Impact, sans-serif;
+        font-size: 58px;
+        font-weight: 900;
+        text-transform: uppercase;
+        transform: rotate(-2deg);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.85);
+        border: 2px solid #222222;
+        letter-spacing: 0.02em;
+      }}
+      .hook-badge-red {{
+        background: #D90429;
+        color: #FFFFFF;
+        padding: 8px 24px;
+        border-radius: 8px;
+        font-family: 'Anton', Impact, sans-serif;
+        font-size: 38px;
+        font-weight: 900;
+        text-transform: uppercase;
+        transform: rotate(1.5deg);
+        box-shadow: 0 8px 24px rgba(217, 4, 41, 0.6);
+        line-height: 1.1;
+        letter-spacing: 0.02em;
+      }}
+      .hook-brush-yellow {{
+        background: #FFE500;
+        color: #000000;
+        padding: 14px 44px;
+        border-radius: 6px;
+        font-family: 'Anton', Impact, sans-serif;
+        font-size: 76px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: -0.02em;
+        transform: rotate(-1deg);
+        box-shadow: 0 12px 36px rgba(0,0,0,0.75);
+      }}
+      .hook-brush-white {{
+        background: #FFFFFF;
+        color: #000000;
+        padding: 8px 30px;
+        border-radius: 6px;
+        font-family: 'Montserrat', sans-serif;
+        font-size: 42px;
+        font-weight: 900;
+        text-transform: uppercase;
+        transform: rotate(1deg);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      }}
+      .hook-neon-green {{
+        color: #39FF14;
+        font-family: 'Anton', Impact, sans-serif;
+        font-size: 104px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: -0.03em;
+        text-shadow: 0 0 24px rgba(57, 255, 20, 0.85), 0 4px 20px #000000;
+        text-align: center;
+        line-height: 1.0;
       }}
       .hook-banner {{
         position: absolute;

@@ -39,9 +39,74 @@ export default function HookEditor({
 
   return (
     <div className="space-y-3.5 text-xs">
+      {/* Indonesian Viral Hook Fields */}
+      <div className="p-2.5 rounded-lg bg-[#161922] border border-[#293245] space-y-2">
+        <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <span>Format Hook Banner Viral (Bahasa Indonesia)</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-0.5">Top Tag (Kotak Hitam)</label>
+            <input
+              type="text"
+              value={data.top_tag || ''}
+              onChange={(e) => handleChange('top_tag', e.target.value)}
+              placeholder="e.g. TIMOTHY / BEVAN"
+              className="w-full px-2 py-1 rounded bg-[#10121a] border border-[#293245] text-xs text-white font-bold uppercase focus:outline-none focus:border-amber-400"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-0.5">Badge Tag (Badge Merah)</label>
+            <input
+              type="text"
+              value={data.badge_tag || ''}
+              onChange={(e) => handleChange('badge_tag', e.target.value)}
+              placeholder="e.g. DI RECALL RECALL"
+              className="w-full px-2 py-1 rounded bg-[#10121a] border border-[#293245] text-xs text-red-400 font-bold uppercase focus:outline-none focus:border-red-400"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] text-slate-400 block mb-0.5">Highlight Headline (Kotak Kuning Besar)</label>
+          <input
+            type="text"
+            value={data.highlight_text || ''}
+            onChange={(e) => handleChange('highlight_text', e.target.value)}
+            placeholder="e.g. DEPAN MUKA / CUAN 4 MILIAR"
+            className="w-full px-2 py-1 rounded bg-[#10121a] border border-[#293245] text-xs text-amber-300 font-extrabold uppercase focus:outline-none focus:border-amber-400"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-0.5">Sub Text (Kotak Putih)</label>
+            <input
+              type="text"
+              value={data.sub_text || ''}
+              onChange={(e) => handleChange('sub_text', e.target.value)}
+              placeholder="e.g. SAMPE DIUSIR"
+              className="w-full px-2 py-1 rounded bg-[#10121a] border border-[#293245] text-xs text-white font-bold uppercase focus:outline-none focus:border-white"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-0.5">Punchline (Teks Hijau Neon)</label>
+            <input
+              type="text"
+              value={data.punchline || ''}
+              onChange={(e) => handleChange('punchline', e.target.value)}
+              placeholder="e.g. SECURITY / NEXT BULL RUN!"
+              className="w-full px-2 py-1 rounded bg-[#10121a] border border-[#293245] text-xs text-emerald-400 font-extrabold uppercase focus:outline-none focus:border-emerald-400"
+            />
+          </div>
+        </div>
+      </div>
+
       <div>
         <label className="text-[11px] text-[#aab9c7] font-semibold block mb-1">
-          Hook Title (Headline)
+          Full Title (Fallback)
         </label>
         <textarea
           rows={2}
@@ -51,7 +116,6 @@ export default function HookEditor({
           className="w-full px-2.5 py-1.5 rounded bg-[#13151f] border border-[#293245] text-xs text-[#e9ecee] uppercase font-bold focus:outline-none focus:border-[#aab9c7]"
         />
       </div>
-
       <div className="grid grid-cols-2 gap-2.5">
         <div>
           <label className="text-[11px] text-[#6e8799] block mb-1">Badge Text</label>

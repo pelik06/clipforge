@@ -26,40 +26,75 @@ export default function HyperFramesCanvasOverlay({
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden z-20">
       {/* 1. Hook Title Banner (Top) */}
+      {/* 1. Hook Title Banner (Top or Centered) */}
       {isHookActive && hookLayer && (
         <div
           onClick={(e) => {
             e.stopPropagation();
             setSelectedLayerId(hookLayer.id);
           }}
-          className={`absolute left-2 right-2 p-2 rounded-lg border shadow-lg flex flex-col items-center text-center pointer-events-auto cursor-pointer transition-all ${
+          className={`absolute left-1 right-1 p-1.5 flex flex-col items-center text-center pointer-events-auto cursor-pointer transition-all ${
             selectedLayerId === hookLayer.id
-              ? 'ring-2 ring-amber-400 border-amber-400'
-              : 'border-[#293245]'
+              ? 'ring-2 ring-amber-400'
+              : ''
           }`}
           style={{
-            top: `${(hookLayer.y / 1920) * 100}%`,
-            background: hookLayer.data?.bg_color || 'rgba(26, 30, 43, 0.94)',
-            transform: `scale(${hookLayer.scale || 1})`,
+            top: hookLayer.data?.highlight_text ? '50%' : `${(hookLayer.y / 1920) * 100}%`,
+            transform: hookLayer.data?.highlight_text ? 'translateY(-50%)' : `scale(${hookLayer.scale || 1})`,
             opacity: hookLayer.opacity !== undefined ? hookLayer.opacity : 1,
           }}
         >
-          <div className="flex items-center gap-1 mb-0.5">
-            <span className="text-[8px] font-extrabold px-1.5 py-0.2 rounded bg-amber-400 text-black">
-              {hookLayer.data?.badge || '★ VIRAL'}
-            </span>
-            {hookLayer.data?.subtitle && (
-              <span className="text-[8px] text-[#aab9c7] font-mono">
-                {hookLayer.data.subtitle}
-              </span>
-            )}
-          </div>
-          <div
-            className="text-[11px] font-extrabold leading-tight tracking-tight uppercase line-clamp-2"
-            style={{ color: hookLayer.data?.text_color || '#E9ECEE' }}
-          >
-            {hookLayer.data?.title || 'VIRAL HOOK TITLE'}
-          </div>
+          {hookLayer.data?.highlight_text ? (
+            <div className="flex flex-col items-center gap-1 select-none pointer-events-none">
+              {/* Row 1 */}
+              <div className="flex items-center gap-1">
+                <span className="bg-black text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider rotate-[-2deg] shadow border border-stone-800">
+                  {hookLayer.data.top_tag || 'VIRAL'}
+                </span>
+                <span className="bg-[#D90429] text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider rotate-[1.5deg] shadow">
+                  {hookLayer.data.badge_tag || 'BOCORIN RAHASIA'}
+                </span>
+              </div>
+              {/* Row 2: Yellow Box */}
+              <div className="bg-[#FFE500] text-black px-2 py-0.5 rounded text-[11px] font-black uppercase tracking-tight shadow rotate-[-1deg]">
+                {hookLayer.data.highlight_text}
+              </div>
+              {/* Row 3: White Box */}
+              {hookLayer.data.sub_text && (
+                <div className="bg-white text-black px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide shadow rotate-[1deg]">
+                  {hookLayer.data.sub_text}
+                </div>
+              )}
+              {/* Row 4: Neon Green */}
+              {hookLayer.data.punchline && (
+                <div className="text-[#39FF14] text-[14px] font-black uppercase tracking-tight drop-shadow-[0_0_8px_rgba(57,255,20,0.8)]">
+                  {hookLayer.data.punchline}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              className="w-full p-2 rounded-lg border border-[#293245] shadow-lg flex flex-col items-center"
+              style={{ background: hookLayer.data?.bg_color || 'rgba(26, 30, 43, 0.94)' }}
+            >
+              <div className="flex items-center gap-1 mb-0.5">
+                <span className="text-[8px] font-extrabold px-1.5 py-0.2 rounded bg-amber-400 text-black">
+                  {hookLayer.data?.badge || '★ VIRAL'}
+                </span>
+                {hookLayer.data?.subtitle && (
+                  <span className="text-[8px] text-[#aab9c7] font-mono">
+                    {hookLayer.data.subtitle}
+                  </span>
+                )}
+              </div>
+              <div
+                className="text-[11px] font-extrabold leading-tight tracking-tight uppercase line-clamp-2"
+                style={{ color: hookLayer.data?.text_color || '#E9ECEE' }}
+              >
+                {hookLayer.data?.title || 'VIRAL HOOK TITLE'}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

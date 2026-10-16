@@ -382,6 +382,14 @@ def update_clip_decision(clip_id: str, decision_status: str, db_path: Optional[P
             return None
         return _format_clip_row(row)
 
+def get_clip(clip_id: str, db_path: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    init_db(db_path)
+    with get_connection(db_path) as conn:
+        row = conn.execute("SELECT * FROM clips WHERE id = ?", (clip_id,)).fetchone()
+        if not row:
+            return None
+        return _format_clip_row(row)
+
 
 def list_clips(job_id: Optional[str] = None, db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
     init_db(db_path)

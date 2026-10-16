@@ -536,7 +536,13 @@ export default function ClipModal({
                   src={clip.media_url}
                   onTimeUpdate={handleTimeUpdate}
                   onEnded={() => setIsPlaying(false)}
-                  className="w-full h-full object-cover cursor-pointer"
+                  className="w-full h-full object-cover cursor-pointer transition-all duration-300"
+                  style={{
+                    filter:
+                      currentTime < 2.0 && composition?.layers?.some((l) => l.type === 'hook' && l.data?.highlight_text)
+                        ? 'blur(4px) grayscale(85%) contrast(110%) brightness(0.7)'
+                        : 'none',
+                  }}
                   onClick={togglePlay}
                 />
               ) : (

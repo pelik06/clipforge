@@ -17,6 +17,60 @@ from services.render.hyperframes_models import (
 )
 
 
+def extract_indonesian_viral_hook(clip: Dict[str, Any], clean_title: str) -> Dict[str, Any]:
+    """Generates structured Indonesian viral hook parts matching the stacked creator layout:
+    - top_tag (black brush box with white text)
+    - badge_tag (red badge with white text)
+    - highlight_text (bright yellow brush box with black text)
+    - sub_text (white brush box with black text)
+    - punchline (giant neon green bold text)
+    """
+    raw_str = (clean_title + " " + str(clip.get("title", "")) + " " + str(clip.get("vod", ""))).lower()
+
+    if any(k in raw_str for k in ("meme", "coin", "4 miliar", "miliar", "cuan", "investasi", "kripto", "crypto", "bull", "market", "financial")):
+        top = "BEVAN" if "bevan" in raw_str else ("TIMOTHY" if "timothy" in raw_str else "INVESTOR")
+        return {
+            "top_tag": top,
+            "badge_tag": "BOCORIN RAHASIA",
+            "highlight_text": "CUAN 4 MILIAR",
+            "sub_text": "DARI MEME COIN",
+            "punchline": "NEXT BULL RUN!",
+            "intro_blur_grayscale": True,
+            "intro_duration": 2.2,
+        }
+    elif any(k in raw_str for k in ("recall", "security", "diusir", "depan muka")):
+        return {
+            "top_tag": "TIMOTHY",
+            "badge_tag": "DI RECALL RECALL",
+            "highlight_text": "DEPAN MUKA",
+            "sub_text": "SAMPE DIUSIR",
+            "punchline": "SECURITY!",
+            "intro_blur_grayscale": True,
+            "intro_duration": 2.2,
+        }
+    elif any(k in raw_str for k in ("chess", "catur", "gotham", "rozman")):
+        return {
+            "top_tag": "GOTHAMCHESS",
+            "badge_tag": "TAKTIK GILA",
+            "highlight_text": "CHESS 3.0",
+            "sub_text": "LAWAN TERTIPU",
+            "punchline": "AUTO CHECKMATE!",
+            "intro_blur_grayscale": True,
+            "intro_duration": 2.2,
+        }
+    else:
+        words = [w for w in clean_title.upper().split() if w not in ("HIGHLIGHT", "#1", "#2", "#3", "#4", "#5")]
+        h_main = " ".join(words[:3]) if len(words) >= 3 else (clean_title.upper() or "RAHASIA BESAR")
+        return {
+            "top_tag": "VIRAL",
+            "badge_tag": "WAJIB TAHU",
+            "highlight_text": h_main[:24],
+            "sub_text": "JANGAN KETINGGALAN",
+            "punchline": "CUAN MAKSIMAL!",
+            "intro_blur_grayscale": True,
+            "intro_duration": 2.2,
+        }
+
 def generate_initial_composition(
     clip: Dict[str, Any],
     transcript_segments: Optional[List[Any]] = None,
@@ -40,6 +94,8 @@ def generate_initial_composition(
         clean_title = parts[1].strip() if len(parts) > 1 else parts[0].strip()
     if not clean_title or len(clean_title) < 4:
         clean_title = "CANVAS HIGHLIGHT"
+
+    viral_hook_data = extract_indonesian_viral_hook(clip, clean_title)
 
     # Auto-select template based on detected speakers and content
     layout_mode = str(clip.get("layout_mode", "TRACK")).upper()
@@ -227,6 +283,7 @@ def generate_initial_composition(
                     "bg_color": "rgba(26, 30, 43, 0.92)",
                     "border_color": "#293245",
                     "text_color": "#E9ECEE",
+                    **viral_hook_data,
                 },
             )
         )
@@ -255,6 +312,7 @@ def generate_initial_composition(
                     "border_color": "#1F4A3D",
                     "text_color": "#FFDE00",
                     "accent_color": "#00FF66",
+                    **viral_hook_data,
                 },
             )
         )
@@ -299,6 +357,7 @@ def generate_initial_composition(
                     "bg_color": "rgba(26, 30, 43, 0.92)",
                     "border_color": "#293245",
                     "text_color": "#E9ECEE",
+                    **viral_hook_data,
                 },
             )
         )
@@ -366,9 +425,10 @@ def generate_initial_composition(
                     "title": clean_title,
                     "subtitle": "BEST VIRAL TAKE",
                     "badge": "🔥 VIRAL MOMENT",
-                    "bg_color": "rgba(26, 30, 43, 0.94)",
+                    "bg_color": "rgba(26, 30, 43, 0.92)",
                     "border_color": "#293245",
                     "text_color": "#E9ECEE",
+                    **viral_hook_data,
                 },
             )
         )
