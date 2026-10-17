@@ -21,8 +21,6 @@ class CaptionPreset(str, Enum):
     NEON_CYAN = "neon_cyan"
     MINIMAL = "minimal"
     NO_CAPTIONS = "no_captions"
-    HYPERFRAMES = "hyperframes"
-
 class CaptionLanguage(str, Enum):
     AUTO = "auto"
     ID = "id"

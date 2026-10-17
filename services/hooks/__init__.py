@@ -1,0 +1,1 @@
+"""Hooks service package."""

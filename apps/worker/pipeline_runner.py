@@ -609,7 +609,7 @@ def execute_job_pipeline_sync(
         if job_cfg.caption_preset == "no_captions":
             update_stage(9, "skipped", detail="Caption rendering skipped: No Captions selected by user.", elapsed=round(time.time() - t9, 2))
         elif transcript_segments:
-            update_stage(9, "completed", detail=f"Burned '{job_cfg.caption_preset}' ASS captions on {len(final_files)} clips with clip-relative offsets.", elapsed=round(time.time() - t9, 2))
+            update_stage(9, "completed", detail=f"Rendered '{job_cfg.caption_preset}' HyperFrames composition on {len(final_files)} clips with Indonesian hook banner.", elapsed=round(time.time() - t9, 2))
         else:
             update_stage(9, "skipped", detail="Captions skipped: speech transcription unavailable on host.", elapsed=round(time.time() - t9, 2))
     except Exception as exc:

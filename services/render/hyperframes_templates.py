@@ -108,6 +108,8 @@ def extract_indonesian_viral_hook(
             "highlight_text": highlight[:22],
             "sub_text": sub[:24],
             "punchline": punchline,
+            "social_post_caption": f"{highlight} {sub}! Tonton sampai habis biar paham kronologinya.",
+            "hashtags": ["#viral", "#fyp", "#shorts", "#trending", "#indonesia"],
             "intro_blur_grayscale": True,
             "intro_duration": 2.2,
         }
@@ -120,6 +122,8 @@ def extract_indonesian_viral_hook(
             "highlight_text": "CUAN 4 MILIAR",
             "sub_text": "DARI MEME COIN",
             "punchline": "NEXT BULL RUN!",
+            "social_post_caption": "Gak nyangka dari meme coin bisa cuan sampai miliaran! Tonton cara lengkapnya di video ini.",
+            "hashtags": ["#crypto", "#cuan", "#memecoin", "#viral", "#investasi"],
             "intro_blur_grayscale": True,
             "intro_duration": 2.2,
         }
@@ -130,6 +134,8 @@ def extract_indonesian_viral_hook(
             "highlight_text": "DEPAN MUKA",
             "sub_text": "SAMPE DIUSIR",
             "punchline": "SECURITY!",
+            "social_post_caption": "Kejadian parah banget sampai diusir security! Simak pengakuan langsungnya.",
+            "hashtags": ["#timothy", "#security", "#viral", "#fyp", "#shorts"],
             "intro_blur_grayscale": True,
             "intro_duration": 2.2,
         }
@@ -143,6 +149,8 @@ def extract_indonesian_viral_hook(
             "highlight_text": h_main[:22],
             "sub_text": h_sub[:24],
             "punchline": "CUAN MAKSIMAL!",
+            "social_post_caption": f"{h_main} {h_sub}! Tonton sampai habis biar paham.",
+            "hashtags": ["#viral", "#fyp", "#shorts", "#trending", "#edukasi"],
             "intro_blur_grayscale": True,
             "intro_duration": 2.2,
         }
@@ -171,7 +179,8 @@ def generate_initial_composition(
     if not clean_title or len(clean_title) < 4:
         clean_title = "CANVAS HIGHLIGHT"
 
-    viral_hook_data = extract_indonesian_viral_hook(clip, clean_title, transcript_segments=transcript_segments)
+    from services.hooks.gemini_hook_generator import GeminiHookGenerator
+    viral_hook_data = GeminiHookGenerator().generate_hook_and_post(clip, transcript_segments=transcript_segments)
 
     # Auto-select template based on detected speakers and content
     layout_mode = str(clip.get("layout_mode", "TRACK")).upper()
