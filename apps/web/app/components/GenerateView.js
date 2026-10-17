@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Film,
   Video,
@@ -74,19 +74,35 @@ export default function GenerateView({
     selectedJobData ||
     jobs.find((j) => j.id === selectedJobId);
 
-  const jobClips = activeJob ? clips.filter((c) => c.job_id === activeJob.id) : [];
+
+  const [liveClips, setLiveClips] = useState([]);
+
+  useEffect(() => {
+    if (!activeJob) return;
+    const isProcessing = !['completed', 'failed', 'waiting_approval'].includes(activeJob.status);
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/v4/jobs', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          const allClips = data.clips || [];
+          const matched = allClips.filter((c) => c.job_id === activeJob.id);
+          setLiveClips(matched);
+        }
+      } catch (err) {}
+    };
+
+    poll();
+    if (isProcessing) {
+      const timer = setInterval(poll, 1500);
+      return () => clearInterval(timer);
+    }
+  }, [activeJob?.id, activeJob?.status]);
+
+  const baseClips = activeJob ? clips.filter((c) => c.job_id === activeJob.id) : [];
+  const jobClips = liveClips.length >= baseClips.length ? liveClips : baseClips;
+
   const captionPresets = [
-    {
-      id: 'hyperframes',
-      label: 'HyperFrames Motion',
-      desc: 'Dynamic Hook Cover + Kinetic Animations',
-      preview: () => (
-        <span className="text-[#aab9c7] font-sans font-bold flex items-center gap-1">
-          <span className="text-[#FFDE00]">⚡ HOOK</span>
-          <span className="text-[#00FFFF]"> + KINETIC</span>
-        </span>
-      )
-    },
     {
       id: 'clean',
       label: 'Clean',
@@ -510,10 +526,19 @@ export default function GenerateView({
                   ) : (
                     <div className="text-xs text-[#6e8799] font-mono">[ Video rendering ]</div>
                   )}
-                  <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+                  <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start max-w-[80%]">
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#13151f]/90 text-[#6ee7b7] border border-[#1f4a3d]">
                       ★ {clip.score}
                     </span>
+                    {clip.composition?.layers?.find?.((l) => l.id === 'layer_hook_title')?.data?.highlight_text ? (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-400 text-black shadow-md uppercase tracking-tight truncate max-w-full">
+                        ⚡ {clip.composition.layers.find((l) => l.id === 'layer_hook_title').data.highlight_text}
+                      </span>
+                    ) : clip.hook_classification ? (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">
+                        {clip.hook_classification}
+                      </span>
+                    ) : null}
                   </div>
                   <div className="absolute top-2 right-2 z-10">
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#13151f]/90 text-[#aab9c7] border border-[#293245]">

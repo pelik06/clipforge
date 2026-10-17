@@ -21,8 +21,6 @@ class CaptionPreset(str, Enum):
     NEON_CYAN = "neon_cyan"
     MINIMAL = "minimal"
     NO_CAPTIONS = "no_captions"
-    HYPERFRAMES = "hyperframes"
-
 class CaptionLanguage(str, Enum):
     AUTO = "auto"
     ID = "id"
@@ -84,6 +82,10 @@ class JobConfig:
     max_clip_duration: float = 120.0
     enable_scene_detection: bool = True
     moment_threshold: float = 0.45
+
+    def __post_init__(self) -> None:
+        if self.caption_preset == "hyperframes":
+            self.caption_preset = CaptionPreset.KARAOKE.value
 
     def validate(self) -> None:
         if self.framing_mode not in [m.value for m in FramingMode]:

@@ -84,6 +84,18 @@ The architecture can be informed by studying OpenShorts, but ClipForge should ma
 
 Do not add OpenShorts as a dependency simply to avoid implementing a component.
 
+
+## LLM Viral Hooks (9Router)
+
+ClipForge generates viral Indonesian hook banners and social captions using 9Router (OpenAI-compatible router endpoint):
+
+```bash
+NINEROUTER_API_KEY=your_key_here
+NINEROUTER_BASE_URL=https://api.9router.com/v1
+NINEROUTER_MODEL=openai/gpt-4o-mini
+```
+
+If no key provided or request fails/times out, system falls back deterministically to local dialogue keyword extraction without crashing pipeline.
 ## Security
 
 Never commit:

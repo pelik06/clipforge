@@ -554,75 +554,68 @@ def execute_job_pipeline_sync(
 
     # --- STAGE 9: Caption Generation & Rendering ---
     t9 = time.time()
-    update_stage(9, "running", detail=f"Rendering '{job_cfg.caption_preset}' subtitles for {len(reframe_files)} clips...")
+    update_stage(9, "running", detail=f"Rendering Hyperframe compositions with '{job_cfg.caption_preset}' for {len(reframe_files)} clips...")
     try:
+        from services.render.hyperframes_templates import generate_initial_composition
+        from services.render.hyperframes_composition import HyperframesCompositionBuilder
+        from services.render.hyperframes_runner import HyperframesRunner
+        from services.clip_quality import ClipQualityAnalyzer, HookPayoffClassifier
+        from services.clustering import TopicClusterer
+        from services.context import ContextCompletenessAnalyzer
+        from services.recommendation import RecommendationEngine
+        from services.visual_quality import VisualCompositionAnalyzer
+        from services.editor.editor_state import EditorStateManager
+
+        analyzer = ClipQualityAnalyzer()
+        hook_classifier = HookPayoffClassifier()
+        context_analyzer = ContextCompletenessAnalyzer()
+        visual_analyzer = VisualCompositionAnalyzer()
+        qc = QualityController()
         cr = CaptionRenderer()
+
+        total = len(reframe_files)
+        raw_clip_objs = []
+        quality_map = {}
+
         for idx, (reframe_path, cand) in enumerate(zip(reframe_files, scored_candidates), 1):
             cand_final = output_dir / f"{job_id}_clip_{idx}.mp4"
-            if job_cfg.caption_preset == "no_captions":
-                if reframe_path.resolve() != cand_final.resolve():
-                    cand_final.write_bytes(reframe_path.read_bytes())
-            elif job_cfg.caption_preset == "hyperframes":
-                hf_rendered = False
-                try:
-                    from services.render.hyperframes_templates import generate_initial_composition
-                    from services.render.hyperframes_composition import HyperframesCompositionBuilder
-                    from services.render.hyperframes_runner import HyperframesRunner
+            rf_analysis = reframe_analyses[idx - 1] if idx <= len(reframe_analyses) else None
 
-                    c_dict = {
-                        "id": f"{job_id}_clip_{idx}",
-                        "title": cand.reasons[0] if (hasattr(cand, "reasons") and cand.reasons) else "HIGHLIGHT MOMENT",
-                        "duration": f"{cand.duration:.1f}s",
-                        "start_time": 0.0,
-                        "end_time": cand.duration,
-                        "layout_mode": getattr(cand, "layout_mode", "TRACK") or "TRACK",
-                    }
-                    c_segs = [s for s in transcript_segments if s.end > cand.start and s.start < cand.end]
-                    hf_comp = generate_initial_composition(c_dict, transcript_segments=c_segs)
-                    hf_comp.duration = cand.duration
+            # 1. Authoritative clip dict & rebased segments
+            c_dict = {
+                "id": f"{job_id}_clip_{idx}",
+                "title": cand.reasons[0] if (hasattr(cand, "reasons") and cand.reasons) else "HIGHLIGHT MOMENT",
+                "start_time": cand.start,
+                "end_time": cand.end,
+                "duration": f"{cand.duration:.1f}s",
+                "caption_preset": job_cfg.caption_preset,
+                "layout_mode": getattr(cand, "layout_mode", "TRACK") or "TRACK",
+            }
+            c_segs = [s for s in transcript_segments if s.end > cand.start and s.start < cand.end]
 
-                    hf_proj = work_dir / f"hf_{job_id}_{idx}"
-                    builder = HyperframesCompositionBuilder()
-                    builder.build_from_composition(hf_proj, reframe_path, hf_comp)
-                    runner = HyperframesRunner(quality="draft", fps=30)
-                    h_res = runner.render(hf_proj, cand_final, quality="draft")
-                    if h_res.success and cand_final.exists() and cand_final.stat().st_size > 0:
-                        hf_rendered = True
-                except Exception as hf_err:
-                    logger.warning(f"HyperFrames direct render failed for clip {idx}: {hf_err}")
+            # 2. Compile and render Hyperframe
+            hf_rendered = False
+            hf_comp = None
+            try:
+                hf_comp = generate_initial_composition(c_dict, transcript_segments=c_segs, rf_analysis=rf_analysis)
+                hf_comp.duration = cand.duration
 
-                if not hf_rendered and transcript_segments:
-                    cr.render(
-                        transcript_segments=transcript_segments,
-                        video_path=str(reframe_path),
-                        output_path=str(cand_final),
-                        config=job_cfg,
-                        clip_start=cand.start,
-                        clip_end=cand.end,
-                    )
-            elif transcript_segments:
-                clip_segments = None
-                try:
-                    from services.transcription.service import Transcriber, is_whisper_available
-                    if is_whisper_available():
-                        trans = Transcriber(model_size="base")
-                        slice_trans = trans.transcribe(str(reframe_path), language=job_cfg.caption_language)
-                        if slice_trans and len(slice_trans) > 0:
-                            clip_segments = slice_trans
-                except Exception:
-                    clip_segments = None
+                hf_proj = work_dir / f"hf_{job_id}_{idx}"
+                builder = HyperframesCompositionBuilder()
+                builder.build_from_composition(hf_proj, reframe_path, hf_comp)
+                runner = HyperframesRunner(quality="draft", fps=30)
+                h_res = runner.render(hf_proj, cand_final, quality="draft")
+                if h_res.success and cand_final.exists() and cand_final.stat().st_size > 0:
+                    hf_rendered = True
+            except Exception as hf_err:
+                logger.warning(f"HyperFrames direct render failed for clip {idx}: {hf_err}")
 
-                try:
-                    if clip_segments:
-                        cr.render(
-                            transcript_segments=clip_segments,
-                            video_path=str(reframe_path),
-                            output_path=str(cand_final),
-                            config=job_cfg,
-                            clip_start=0.0,
-                            clip_end=cand.duration,
-                        )
-                    else:
+            if not hf_rendered:
+                if job_cfg.caption_preset == "no_captions":
+                    if reframe_path.resolve() != cand_final.resolve():
+                        cand_final.write_bytes(reframe_path.read_bytes())
+                elif transcript_segments:
+                    try:
                         cr.render(
                             transcript_segments=transcript_segments,
                             video_path=str(reframe_path),
@@ -631,86 +624,26 @@ def execute_job_pipeline_sync(
                             clip_start=cand.start,
                             clip_end=cand.end,
                         )
-                except Exception as render_err:
-                    logger.warning(f"Caption render fallback for clip {idx}: {render_err}")
-                    import copy
-                    fallback_cfg = copy.copy(job_cfg)
-                    fallback_cfg.caption_preset = "clean"
-                    fallback_cfg.caption_word_highlight = False
-                    cr.render(
-                        transcript_segments=transcript_segments,
-                        video_path=str(reframe_path),
-                        output_path=str(cand_final),
-                        config=fallback_cfg,
-                        clip_start=cand.start,
-                        clip_end=cand.end,
-                    )
-            else:
-                if reframe_path.resolve() != cand_final.resolve():
-                    cand_final.write_bytes(reframe_path.read_bytes())
+                    except Exception as r_err:
+                        logger.warning(f"Fallback caption render failed for clip {idx}: {r_err}")
+                        if reframe_path.resolve() != cand_final.resolve():
+                            cand_final.write_bytes(reframe_path.read_bytes())
+                else:
+                    if reframe_path.resolve() != cand_final.resolve():
+                        cand_final.write_bytes(reframe_path.read_bytes())
+
             final_files.append(cand_final)
 
-        if job_cfg.caption_preset == "no_captions":
-            update_stage(9, "skipped", detail="Caption rendering skipped: No Captions selected by user.", elapsed=round(time.time() - t9, 2))
-        elif transcript_segments:
-            update_stage(9, "completed", detail=f"Burned '{job_cfg.caption_preset}' ASS captions on {len(final_files)} clips with clip-relative offsets.", elapsed=round(time.time() - t9, 2))
-        else:
-            update_stage(9, "skipped", detail="Captions skipped: speech transcription unavailable on host.", elapsed=round(time.time() - t9, 2))
-    except Exception as exc:
-        update_stage(9, "failed", error=f"Caption rendering error: {str(exc)}")
-        return job
-
-    # --- STAGE 10: Quality Control ---
-    t10 = time.time()
-    update_stage(10, "running", detail=f"FFprobe inspecting {len(final_files)} generated clips...")
-    try:
-        qc = QualityController()
-        for f_path in final_files:
-            qc_res = qc.check(str(f_path))
+            # 3. Technical QC check
+            qc_res = qc.check(str(cand_final))
             if not qc_res.passed:
-                raise RuntimeError(f"QC failed for {f_path.name}: {qc_res.errors}")
+                raise RuntimeError(f"QC failed for {cand_final.name}: {qc_res.errors}")
             qc_results.append(qc_res.checks)
-        update_stage(10, "completed", detail=f"Technical QC passed on all {len(final_files)} clips: H.264 video, AAC audio, valid container.", elapsed=round(time.time() - t10, 2))
-    except Exception as exc:
-        update_stage(10, "failed", error=f"Quality control rejected file: {str(exc)}")
-        return job
 
-    # --- STAGE 11: Output Registration ---
-    t11 = time.time()
-    update_stage(11, "running", detail=f"Registering {len(final_files)} playable outputs in media workspace...")
-    try:
-        for f_path in final_files:
-            if not f_path.exists() or f_path.stat().st_size <= 1024:
-                raise FileNotFoundError(f"Output MP4 missing or empty: {f_path.name}")
-        update_stage(11, "completed", detail=f"Exposed {len(final_files)} clips at /media/{job_id}_clip_*.mp4.", elapsed=round(time.time() - t11, 2))
-    except Exception as exc:
-        update_stage(11, "failed", error=str(exc))
-        return job
-
-    # --- STAGE 12: Human Approval Gate ---
-    t12 = time.time()
-    update_stage(12, "running", detail=f"Registering {len(final_files)} clips into review queue for operator approval...")
-    try:
-        from services.clip_quality import ClipQualityAnalyzer, HookPayoffClassifier
-        from services.clustering import TopicClusterer
-        from services.context import ContextCompletenessAnalyzer
-        from services.recommendation import RecommendationEngine
-        from services.visual_quality import VisualCompositionAnalyzer
-
-        analyzer = ClipQualityAnalyzer()
-        rec_engine = RecommendationEngine(default_top_k=job_cfg.max_clips or 5)
-        hook_classifier = HookPayoffClassifier()
-        context_analyzer = ContextCompletenessAnalyzer()
-        visual_analyzer = VisualCompositionAnalyzer()
-        topic_clusterer = TopicClusterer()
-        raw_clip_objs = []
-        quality_map = {}
-        for idx, (f_path, cand, qc_chk) in enumerate(zip(final_files, scored_candidates, qc_results), 1):
-            rf_analysis = reframe_analyses[idx - 1] if idx <= len(reframe_analyses) else None
+            # 4. Construct clip object
             c_id = f"clip_{uuid.uuid4().hex[:6]}"
-            clip_segs = [s for s in transcript_segments if s.end > cand.start and s.start < cand.end]
-            clip_text = " ".join([s.text for s in clip_segs]) or "Conversational highlight moment"
-            clip_sents = [s.text for s in clip_segs]
+            clip_text = " ".join([s.text for s in c_segs]) or "Conversational highlight moment"
+            clip_sents = [s.text for s in c_segs]
 
             q_feat = analyzer.analyze_clip(
                 clip_id=c_id,
@@ -726,6 +659,9 @@ def execute_job_pipeline_sync(
             )
             quality_map[c_id] = q_feat
 
+            if not hf_comp:
+                hf_comp = generate_initial_composition(c_dict, transcript_segments=c_segs, rf_analysis=rf_analysis)
+
             clip_obj = {
                 "id": c_id,
                 "job_id": job_id,
@@ -740,11 +676,11 @@ def execute_job_pipeline_sync(
                 "media_type": "rendered_video",
                 "render_status": "rendered",
                 "render_notice": f"Highlight signals: {', '.join(cand.reasons)}",
-                "media_url": f"/media/{f_path.name}",
+                "media_url": f"/media/{cand_final.name}",
                 "start_time": cand.start,
                 "end_time": cand.end,
                 "resolution": "1080x1920",
-                "qc_checks": qc_chk,
+                "qc_checks": qc_res.checks,
                 "framing_mode": job_cfg.framing_mode,
                 "caption_preset": job_cfg.caption_preset,
                 "caption_language": job_cfg.caption_language,
@@ -759,6 +695,7 @@ def execute_job_pipeline_sync(
                 "parent_moment_id": getattr(cand, "parent_moment_id", None),
                 "text": clip_text,
                 "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "composition": hf_comp.to_dict(),
             }
 
             # P3 Intelligence Analyses
@@ -794,37 +731,44 @@ def execute_job_pipeline_sync(
                 flags.append("CAPTION SAFE")
             clip_obj["quality_flags"] = flags
 
-            raw_clip_objs.append(clip_obj)
-
-        # Topic family clustering & diversity
-        topic_clusterer.cluster_clips(raw_clip_objs)
-        recommended_clips = rec_engine.recommend_clips(raw_clip_objs, quality_map=quality_map)
-        diversified_clips = topic_clusterer.enforce_family_diversity(recommended_clips)
-
-        from services.render.hyperframes_templates import generate_initial_composition
-        from services.editor.editor_state import EditorStateManager
-        from core.storage import save_editor_state
-
-        for clip_obj in diversified_clips:
-            c_segs = [s for s in transcript_segments if s.end > clip_obj["start_time"] and s.start < clip_obj["end_time"]]
-            hf_comp = generate_initial_composition(clip_obj, transcript_segments=c_segs)
-            clip_obj["composition"] = hf_comp.to_dict()
+            # 5. SAVE CLIP IMMEDIATELY to SQLite database
             save_clip(clip_obj)
 
-            # Persist in EditorState for Studio Editor
+            # 6. Save EditorState
             ed_mgr = EditorStateManager()
             state = ed_mgr.load_or_initialize(clip_obj, transcript_segments=c_segs)
             state.user_overrides["composition"] = hf_comp.to_dict()
             ed_mgr.save(state)
 
             rendered_clips.append(clip_obj)
-        update_stage(12, "completed", detail=f"All {len(rendered_clips)} clips registered in review queue. Awaiting human operator approval.", elapsed=round(time.time() - t12, 2))
+            raw_clip_objs.append(clip_obj)
+
+            # 7. Update incremental progress live
+            job["progress"] = min(95, 20 + int((idx / total) * 75))
+            job["stage"] = f"Rendered clip {idx}/{total} with Hyperframe"
+            save_job(job)
+
+        update_stage(9, "completed", detail=f"Rendered {len(final_files)} clips with Hyperframes composition.", elapsed=round(time.time() - t9, 2))
+        update_stage(10, "completed", detail=f"Technical QC passed on all {len(final_files)} clips: H.264 video, AAC audio, valid container.")
+        update_stage(11, "completed", detail=f"Exposed {len(final_files)} clips at /media/{job_id}_clip_*.mp4.")
+
+        # Stage 12: Human Approval Gate & Clustering
+        rec_engine = RecommendationEngine(default_top_k=job_cfg.max_clips or 5)
+        topic_clusterer = TopicClusterer()
+        topic_clusterer.cluster_clips(raw_clip_objs)
+        recommended_clips = rec_engine.recommend_clips(raw_clip_objs, quality_map=quality_map)
+        diversified_clips = topic_clusterer.enforce_family_diversity(recommended_clips)
+        for clip_obj in diversified_clips:
+            save_clip(clip_obj)
+
+        update_stage(12, "completed", detail=f"All {len(rendered_clips)} clips registered in review queue. Awaiting human operator approval.")
         job["status"] = "waiting_approval"
         job["progress"] = 100
         job["stage"] = f"{len(rendered_clips)} clips rendered in 9:16 vertical MP4 — awaiting human approval"
         save_job(job)
     except Exception as exc:
-        update_stage(12, "failed", error=str(exc))
+        logger.exception("Pipeline rendering/approval error")
+        update_stage(9, "failed", error=str(exc))
         return job
 
     return job

@@ -124,7 +124,7 @@ export default function ClipModal({
 
   // Export settings
   const [exportRes, setExportRes] = useState('1080p');
-  const [exportPlatform, setExportPlatform] = useState('hyperframes');
+  const [exportPlatform, setExportPlatform] = useState('tiktok');
   const [exporting, setExporting] = useState(false);
   const [exportDone, setExportDone] = useState(false);
   const isApproved = clip.status === 'APPROVED';
@@ -1250,9 +1250,8 @@ export default function ClipModal({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       {[
                         { id: 'tiktok', name: 'TikTok 9:16' },
-                        { id: 'hyperframes', name: '★ HyperFrames HTML' },
-                        { id: 'reels', name: 'Instagram Reels' },
-                        { id: 'shorts', name: 'YouTube Shorts' }
+                        { id: 'high_quality', name: 'High Quality Master 1080p' },
+                        { id: 'draft', name: 'Fast Draft 720p' }
                       ].map((p) => (
                         <button
                           key={p.id}

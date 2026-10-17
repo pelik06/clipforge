@@ -171,8 +171,11 @@ def generate_initial_composition(
     if not clean_title or len(clean_title) < 4:
         clean_title = "CANVAS HIGHLIGHT"
 
-    viral_hook_data = extract_indonesian_viral_hook(clip, clean_title, transcript_segments=transcript_segments)
-
+    try:
+        from services.llm.ninerouter_service import NineRouterService
+        viral_hook_data = NineRouterService().generate_clip_hook(clip, transcript_segments=transcript_segments)
+    except Exception:
+        viral_hook_data = extract_indonesian_viral_hook(clip, clean_title, transcript_segments=transcript_segments)
     # Auto-select template based on detected speakers and content
     layout_mode = str(clip.get("layout_mode", "TRACK")).upper()
     has_dual_speakers = layout_mode == "SPLIT" or (
@@ -460,6 +463,7 @@ def generate_initial_composition(
                     "bg_color": "rgba(19, 21, 31, 0.85)",
                     "border_color": "#293245",
                     "text_color": "#E9ECEE",
+                    **viral_hook_data,
                 },
             )
         )
