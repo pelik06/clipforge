@@ -512,18 +512,10 @@ def save_editor_state_endpoint(clip_id: str, state_dict: dict):
     try:
         state = EditorState.from_dict(state_dict)
         saved = editor_state_manager.save(state)
-        # Sync composition to clips table
-        comp_to_sync = state.user_overrides.get("composition") or state.output.get("composition")
-        if comp_to_sync:
-            with get_connection() as conn:
-                conn.execute(
-                    "UPDATE clips SET composition_json = ? WHERE id = ?",
-                    (json.dumps(comp_to_sync), clip_id),
-                )
-                conn.commit()
         return {"status": "saved", "state": saved.to_dict()}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
+
 
 @app.post("/api/v4/editor/{clip_id}/operation")
 def apply_editor_operation(clip_id: str, req: EditorOperationRequest):

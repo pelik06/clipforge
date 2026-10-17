@@ -124,7 +124,7 @@ export default function ClipModal({
 
   // Export settings
   const [exportRes, setExportRes] = useState('1080p');
-  const [exportPlatform, setExportPlatform] = useState('tiktok');
+  const [exportPlatform, setExportPlatform] = useState('hyperframes');
   const [exporting, setExporting] = useState(false);
   const [exportDone, setExportDone] = useState(false);
   const isApproved = clip.status === 'APPROVED';
@@ -230,7 +230,7 @@ export default function ClipModal({
   }, [clip.id]);
 
   // Debounced Autosave to backend
-  const triggerAutosave = async (overrideComp = null) => {
+  const triggerAutosave = async () => {
     setAutosaveStatus('Saving...');
     try {
       const payload = {
@@ -245,7 +245,7 @@ export default function ClipModal({
         editor_version: editorVersion + 1,
         status: editorStatus,
         user_overrides: {
-          composition: overrideComp || composition,
+          composition: composition,
         },
       };
       const res = await fetch(`/api/v4/editor/${clip.id}`, {
@@ -914,12 +914,11 @@ export default function ClipModal({
                   hookLayer={composition?.layers?.find((l) => l.type === 'hook')}
                   onUpdateHook={(updated) => {
                     pushUndo();
-                    const nextComp = {
-                      ...composition,
-                      layers: (composition?.layers || []).map((l) => (l.id === updated.id ? updated : l)),
-                    };
-                    setComposition(nextComp);
-                    triggerAutosave(nextComp);
+                    setComposition((prev) => ({
+                      ...prev,
+                      layers: (prev?.layers || []).map((l) => (l.id === updated.id ? updated : l)),
+                    }));
+                    triggerAutosave();
                   }}
                 />
               )}
@@ -1251,6 +1250,7 @@ export default function ClipModal({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       {[
                         { id: 'tiktok', name: 'TikTok 9:16' },
+                        { id: 'hyperframes', name: '★ HyperFrames HTML' },
                         { id: 'reels', name: 'Instagram Reels' },
                         { id: 'shorts', name: 'YouTube Shorts' }
                       ].map((p) => (

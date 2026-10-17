@@ -525,14 +525,13 @@ def generate_initial_composition(
             visible=True,
             animation_in={"type": "word_pop", "duration": 0.15},
             data={
-                "caption_preset": str(clip.get("caption_preset") or "karaoke").lower(),
-                "font_family": "Montserrat" if str(clip.get("caption_preset") or "").lower() in ("clean", "neon_cyan") else ("Inter" if str(clip.get("caption_preset") or "").lower() == "minimal" else "Anton"),
-                "font_size": 48 if str(clip.get("caption_preset") or "").lower() == "minimal" else (64 if str(clip.get("caption_preset") or "").lower() == "clean" else 74),
-                "text_color": "#00FFFF" if str(clip.get("caption_preset") or "").lower() == "neon_cyan" else ("#FFDE00" if str(clip.get("caption_preset") or "").lower() == "viral_beast" else "#FFFFFF"),
-                "active_color": "#39FF14" if str(clip.get("caption_preset") or "").lower() == "viral_beast" else ("#FFFFFF" if str(clip.get("caption_preset") or "").lower() in ("clean", "neon_cyan", "minimal") else "#FCD34D"),
+                "font_family": "Anton",
+                "font_size": 72,
+                "text_color": "#FFDE00" if selected_template == TemplateType.FINANCE.value else "#FFFFFF",
+                "active_color": "#00FF66" if selected_template == TemplateType.FINANCE.value else "#FCD34D",
                 "stroke_color": "#000000",
                 "stroke_width": 4,
-                "position": clip.get("caption_position", "bottom_safe"),
+                "position": "bottom_safe",
             },
         )
     )
