@@ -77,17 +77,6 @@ export default function GenerateView({
   const jobClips = activeJob ? clips.filter((c) => c.job_id === activeJob.id) : [];
   const captionPresets = [
     {
-      id: 'hyperframes',
-      label: 'HyperFrames Motion',
-      desc: 'Dynamic Hook Cover + Kinetic Animations',
-      preview: () => (
-        <span className="text-[#aab9c7] font-sans font-bold flex items-center gap-1">
-          <span className="text-[#FFDE00]">⚡ HOOK</span>
-          <span className="text-[#00FFFF]"> + KINETIC</span>
-        </span>
-      )
-    },
-    {
       id: 'clean',
       label: 'Clean',
       desc: 'Crisp readable white text',

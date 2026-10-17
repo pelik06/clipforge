@@ -358,8 +358,7 @@ export default function ClipsView({
                         onChange={(e) => handlePresetChange(clip.id, e.target.value)}
                         className="flex-1 px-1.5 py-1 rounded bg-[#13151f] border border-[#293245] text-[11px] text-slate-300"
                       >
-                        <option value="hyperframes">HyperFrames (HTML Motion Graphics)</option>
-                        <option value="tiktok">TikTok (9:16)</option>
+                        <option value="tiktok">TikTok 9:16 (Motion Graphics)</option>
                         <option value="high_quality">High Quality Master (1080p)</option>
                         <option value="draft">Fast Draft (720p)</option>
                       </select>

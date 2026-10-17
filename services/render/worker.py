@@ -107,8 +107,13 @@ class RenderWorker:
         duration_sec = float(job.config.get("duration", 0.0))
         vf_filter = job.config.get("vf_filter")
 
+        has_composition = (
+            preset_cfg.name == "hyperframes"
+            or ("composition" in job.config and bool(job.config["composition"]))
+            or bool(job.config.get("snapshot", {}).get("editor_state", {}).get("user_overrides", {}).get("composition"))
+        )
         try:
-            if preset_cfg.name == "hyperframes":
+            if has_composition:
                 from services.render.hyperframes_composition import (
                     HyperframesCompositionBuilder,
                     HyperframesConfig,

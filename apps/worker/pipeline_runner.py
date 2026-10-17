@@ -562,7 +562,7 @@ def execute_job_pipeline_sync(
             if job_cfg.caption_preset == "no_captions":
                 if reframe_path.resolve() != cand_final.resolve():
                     cand_final.write_bytes(reframe_path.read_bytes())
-            elif job_cfg.caption_preset == "hyperframes":
+            elif transcript_segments:
                 hf_rendered = False
                 try:
                     from services.render.hyperframes_templates import generate_initial_composition
@@ -573,9 +573,10 @@ def execute_job_pipeline_sync(
                         "id": f"{job_id}_clip_{idx}",
                         "title": cand.reasons[0] if (hasattr(cand, "reasons") and cand.reasons) else "HIGHLIGHT MOMENT",
                         "duration": f"{cand.duration:.1f}s",
-                        "start_time": 0.0,
-                        "end_time": cand.duration,
+                        "start_time": cand.start,
+                        "end_time": cand.end,
                         "layout_mode": getattr(cand, "layout_mode", "TRACK") or "TRACK",
+                        "caption_preset": job_cfg.caption_preset,
                     }
                     c_segs = [s for s in transcript_segments if s.end > cand.start and s.start < cand.end]
                     hf_comp = generate_initial_composition(c_dict, transcript_segments=c_segs)
@@ -591,57 +592,12 @@ def execute_job_pipeline_sync(
                 except Exception as hf_err:
                     logger.warning(f"HyperFrames direct render failed for clip {idx}: {hf_err}")
 
-                if not hf_rendered and transcript_segments:
+                if not hf_rendered:
                     cr.render(
                         transcript_segments=transcript_segments,
                         video_path=str(reframe_path),
                         output_path=str(cand_final),
                         config=job_cfg,
-                        clip_start=cand.start,
-                        clip_end=cand.end,
-                    )
-            elif transcript_segments:
-                clip_segments = None
-                try:
-                    from services.transcription.service import Transcriber, is_whisper_available
-                    if is_whisper_available():
-                        trans = Transcriber(model_size="base")
-                        slice_trans = trans.transcribe(str(reframe_path), language=job_cfg.caption_language)
-                        if slice_trans and len(slice_trans) > 0:
-                            clip_segments = slice_trans
-                except Exception:
-                    clip_segments = None
-
-                try:
-                    if clip_segments:
-                        cr.render(
-                            transcript_segments=clip_segments,
-                            video_path=str(reframe_path),
-                            output_path=str(cand_final),
-                            config=job_cfg,
-                            clip_start=0.0,
-                            clip_end=cand.duration,
-                        )
-                    else:
-                        cr.render(
-                            transcript_segments=transcript_segments,
-                            video_path=str(reframe_path),
-                            output_path=str(cand_final),
-                            config=job_cfg,
-                            clip_start=cand.start,
-                            clip_end=cand.end,
-                        )
-                except Exception as render_err:
-                    logger.warning(f"Caption render fallback for clip {idx}: {render_err}")
-                    import copy
-                    fallback_cfg = copy.copy(job_cfg)
-                    fallback_cfg.caption_preset = "clean"
-                    fallback_cfg.caption_word_highlight = False
-                    cr.render(
-                        transcript_segments=transcript_segments,
-                        video_path=str(reframe_path),
-                        output_path=str(cand_final),
-                        config=fallback_cfg,
                         clip_start=cand.start,
                         clip_end=cand.end,
                     )
