@@ -122,7 +122,6 @@ export default function ClipModal({
   const [selectedLayerId, setSelectedLayerId] = useState('layer_hook_title');
   const [showHyperframesPreview, setShowHyperframesPreview] = useState(true);
 
-  const [isGeneratingGemini, setIsGeneratingGemini] = useState(false);
   // Export settings
   const [exportRes, setExportRes] = useState('1080p');
   const [exportPlatform, setExportPlatform] = useState('tiktok');
@@ -261,28 +260,6 @@ export default function ClipModal({
       }
     } catch (e) {
       setAutosaveStatus('Save failed');
-    }
-  };
-  const handleGenerateGeminiHook = async () => {
-    if (!clip?.id || isGeneratingGemini) return;
-    setIsGeneratingGemini(true);
-    try {
-      const res = await fetch(`/api/v4/editor/${clip.id}/gemini_hook`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.composition) {
-          pushUndo();
-          setComposition(data.composition);
-          triggerAutosave(data.composition);
-        }
-      }
-    } catch (err) {
-      console.error('Gemini hook generation failed:', err);
-    } finally {
-      setIsGeneratingGemini(false);
     }
   };
 
@@ -935,8 +912,6 @@ export default function ClipModal({
               {activeInspectorTab === 'hook' && (
                 <HookEditor
                   hookLayer={composition?.layers?.find((l) => l.type === 'hook')}
-                  onGenerateGeminiHook={handleGenerateGeminiHook}
-                  isGeneratingGemini={isGeneratingGemini}
                   onUpdateHook={(updated) => {
                     pushUndo();
                     const nextComp = {
@@ -948,6 +923,7 @@ export default function ClipModal({
                   }}
                 />
               )}
+
               {/* TAB: LAYERS & MOTION (P6) */}
               {activeInspectorTab === 'layers' && (
                 <HyperFramesLayers

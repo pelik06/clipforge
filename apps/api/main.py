@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import json
 import os
 import re
 import uuid
@@ -15,7 +14,6 @@ from pydantic import BaseModel
 
 from core.models.configuration import JobConfig
 from core.storage import (
-    get_connection,
     get_job,
     list_clips,
     list_jobs,
@@ -564,70 +562,6 @@ def apply_editor_operation(clip_id: str, req: EditorOperationRequest):
         return {"status": "success", "state": saved.to_dict()}
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
-
-@app.post("/api/v4/editor/{clip_id}/gemini_hook")
-def generate_gemini_hook_endpoint(clip_id: str):
-    from services.hooks.gemini_hook_generator import GeminiHookGenerator
-    from services.editor.models import EditorState
-    from core.models.transcript import TranscriptSegment
-
-    clips = list_clips()
-    target_clip = next((c for c in clips if c["id"] == clip_id), None)
-    if not target_clip:
-        for f in FIXTURES_STORE:
-            if f["id"] == clip_id:
-                target_clip = f
-                break
-    if not target_clip:
-        raise HTTPException(status_code=404, detail=f"Clip {clip_id} not found")
-
-    state = editor_state_manager.load_or_initialize(target_clip)
-    comp_dict = state.user_overrides.get("composition") or state.output.get("composition") or target_clip.get("composition")
-    if not comp_dict:
-        from services.render.hyperframes_templates import generate_initial_composition
-        comp_obj = generate_initial_composition(target_clip)
-        comp_dict = comp_obj.to_dict()
-
-    # Prepare segments from editor captions
-    segs = []
-    captions = state.captions or []
-    for c in captions:
-        segs.append(TranscriptSegment(text=c.text, start=c.start, end=c.end))
-
-    generator = GeminiHookGenerator()
-    hook_data = generator.generate_hook_and_post(target_clip, transcript_segments=segs)
-
-    # Update hook layer and social post metadata
-    layers = comp_dict.get("layers", [])
-    hook_layer = next((l for l in layers if l.get("type") == "hook" or l.get("id") == "layer_hook_title"), None)
-    if hook_layer:
-        hook_layer["data"] = {
-            **hook_layer.get("data", {}),
-            **hook_data,
-        }
-    comp_dict["metadata"] = {
-        **comp_dict.get("metadata", {}),
-        "social_post_caption": hook_data.get("social_post_caption"),
-        "hashtags": hook_data.get("hashtags"),
-    }
-
-    state.user_overrides["composition"] = comp_dict
-    saved_state = editor_state_manager.save(state)
-
-    # Persist in clips DB
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE clips SET composition_json = ? WHERE id = ?",
-            (json.dumps(comp_dict), clip_id),
-        )
-        conn.commit()
-
-    return {
-        "status": "success",
-        "hook_data": hook_data,
-        "composition": comp_dict,
-        "state": saved_state.to_dict(),
-    }
 
 
 @app.post("/api/v4/editor/{clip_id}/preview")

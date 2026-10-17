@@ -249,15 +249,11 @@ export default function GenerateView({
           {/* Section 3: Caption Presets */}
           <div className="pt-2 border-t border-[#293245]">
             <div className="flex items-center justify-between mb-2.5">
-              <div>
-                <label className="text-xs font-semibold text-[#e9ecee] uppercase tracking-wider block">
-                  Pilihan Preset Subtitle & Caption
-                </label>
-                <span className="text-[10px] text-amber-300 font-mono flex items-center gap-1 mt-0.5">
-                  ★ Powered by HyperFrames Motion Engine
-                </span>
-              </div>
+              <label className="text-xs font-semibold text-[#e9ecee] uppercase tracking-wider block">
+                Pilihan Preset Subtitle & Caption
+              </label>
               <button
+                type="button"
                 onClick={() => setShowAdvancedCaptions(!showAdvancedCaptions)}
                 className="text-[11px] text-[#aab9c7] hover:underline font-mono"
               >

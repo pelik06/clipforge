@@ -47,4 +47,3 @@ class Settings:
     scene_cut_snap: bool = os.getenv("CLIPFORGE_SCENE_CUT_SNAP", "true").lower() in ("true", "1")
     track_timeout: float = float(os.getenv("CLIPFORGE_TRACK_TIMEOUT", "1.5"))
     reframe_smoothing: float = float(os.getenv("CLIPFORGE_REFRAME_SMOOTHING", "0.55"))
-    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
